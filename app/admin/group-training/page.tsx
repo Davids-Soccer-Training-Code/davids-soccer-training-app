@@ -5,6 +5,11 @@ import { del, put } from "@vercel/blob";
 
 import { sql } from "@/db";
 import { authOptions } from "@/lib/auth";
+import {
+  PLAYER_DASHBOARD_URL,
+  sendGroupSignupConfirmationEmail,
+  sendGroupSignupOwnerNotificationEmail,
+} from "@/lib/groupSignupEmails";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +39,8 @@ type GroupSignupRow = {
   foot: string | null;
   team: string | null;
   notes: string | null;
+  signup_price: number | null;
+  amount_paid: number | null;
   contact_email: string;
   contact_phone: string | null;
   emergency_contact: string;
@@ -47,6 +54,26 @@ type GroupSignupRow = {
   latest_profile_id: string | null;
   latest_profile_name: string | null;
   latest_profile_computed_at: string | null;
+};
+
+type AppPlayerRow = {
+  id: string;
+  name: string;
+  birthdate: string | null;
+  dominant_foot: string | null;
+  team_level: string | null;
+  parent_name: string | null;
+  parent_email: string | null;
+  parent_phone: string | null;
+};
+
+type SessionEmailRow = {
+  id: number;
+  title: string;
+  session_date: string;
+  session_date_end: string | null;
+  location: string | null;
+  price: number | null;
 };
 
 function formatDateTime(value: string | null) {
@@ -71,6 +98,13 @@ function formatMoney(value: number | null) {
 
 function formatPlayerName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim();
+}
+
+function splitName(name: string) {
+  const cleaned = name.trim().replace(/\s+/g, " ");
+  if (!cleaned) return { firstName: "", lastName: "" };
+  const [firstName, ...rest] = cleaned.split(" ");
+  return { firstName, lastName: rest.join(" ") };
 }
 
 function cleanNullableText(value: FormDataEntryValue | null) {
@@ -327,8 +361,271 @@ async function deleteGroupSessionSignupAction(formData: FormData) {
   revalidatePath("/admin/group-training");
 }
 
+async function addSignupFromAppPlayerAction(formData: FormData) {
+  "use server";
+
+  await requireAdminAccess();
+
+  const groupSessionId = parsePositiveInt(formData.get("group_session_id"), 0);
+  const appPlayerId = cleanRequiredText(formData.get("app_player_id"));
+  if (!groupSessionId || !appPlayerId) return;
+
+  const playerRows = (await sql`
+    SELECT
+      p.id,
+      p.name,
+      p.birthdate::text AS birthdate,
+      p.dominant_foot,
+      p.team_level,
+      parent.name AS parent_name,
+      parent.email AS parent_email,
+      parent.phone AS parent_phone
+    FROM players p
+    LEFT JOIN parents parent ON parent.id = p.parent_id
+    WHERE p.id = ${appPlayerId}
+    LIMIT 1
+  `) as unknown as AppPlayerRow[];
+  const player = playerRows[0];
+  if (!player) return;
+
+  const sessionRows = (await sql`
+    SELECT price::float8 AS price
+         , id::int AS id
+         , title
+         , session_date::text AS session_date
+         , session_date_end::text AS session_date_end
+         , location
+    FROM group_sessions
+    WHERE id = ${groupSessionId}
+    LIMIT 1
+  `) as unknown as SessionEmailRow[];
+  const session = sessionRows[0];
+  if (!session) return;
+  const sessionPrice = session.price ?? null;
+
+  const split = splitName(player.name);
+  const firstName = split.firstName || "Player";
+  const lastName = split.lastName || "Player";
+
+  const emergencyContact =
+    cleanNullableText(formData.get("emergency_contact_override")) ||
+    cleanNullableText(player.parent_name) ||
+    cleanNullableText(player.parent_email) ||
+    "Parent";
+  const contactEmail =
+    cleanNullableText(formData.get("contact_email_override")) ||
+    cleanNullableText(player.parent_email) ||
+    null;
+  const contactPhone =
+    cleanNullableText(formData.get("contact_phone_override")) ||
+    cleanNullableText(player.parent_phone);
+  if (!contactEmail) return;
+
+  const hasPaid = String(formData.get("has_paid") ?? "") === "on";
+  const signupPrice = parseNullableMoney(formData.get("signup_price")) ?? sessionPrice;
+  const amountPaidInput = parseNullableMoney(formData.get("amount_paid"));
+  const amountPaid = hasPaid ? amountPaidInput ?? signupPrice : null;
+
+  await sql`
+    INSERT INTO player_signups (
+      group_session_id,
+      first_name,
+      last_name,
+      emergency_contact,
+      contact_email,
+      contact_phone,
+      birthday,
+      foot,
+      team,
+      notes,
+      has_paid,
+      signup_price,
+      amount_paid
+    )
+    VALUES (
+      ${groupSessionId},
+      ${firstName},
+      ${lastName},
+      ${emergencyContact},
+      ${contactEmail},
+      ${contactPhone},
+      ${player.birthdate}::date,
+      ${player.dominant_foot},
+      ${player.team_level},
+      ${cleanNullableText(formData.get("notes"))},
+      ${hasPaid},
+      ${signupPrice},
+      ${amountPaid}
+    )
+  `;
+
+  if (hasPaid) {
+    const playerFullName = `${firstName} ${lastName}`.trim();
+    const loginEmail = contactEmail;
+    const ownerAlertEmail =
+      process.env.GROUP_SIGNUP_ALERT_EMAIL ||
+      process.env.GMAIL_USER_GROUPS ||
+      "davidfalesct@gmail.com";
+
+    try {
+      await sendGroupSignupConfirmationEmail({
+        to: contactEmail,
+        firstName,
+        playerNames: [playerFullName],
+        sessionTitle: session.title,
+        sessionDate: session.session_date,
+        sessionDateEnd: session.session_date_end,
+        location: session.location,
+        receiptUrl: null,
+        loginEmail,
+        loginPassword: null,
+      });
+    } catch (emailError) {
+      console.error("Failed to send group signup confirmation email", emailError);
+    }
+
+    try {
+      await sendGroupSignupOwnerNotificationEmail({
+        to: ownerAlertEmail,
+        playerNames: [playerFullName],
+        emergencyContact,
+        contactPhone,
+        contactEmail,
+        sessionTitle: session.title,
+        sessionDate: session.session_date,
+        sessionDateEnd: session.session_date_end,
+        location: session.location,
+        receiptUrl: null,
+        parentPortalUrl: PLAYER_DASHBOARD_URL,
+        parentLoginEmail: loginEmail,
+        parentLoginPassword: null,
+      });
+    } catch (ownerEmailError) {
+      console.error("Failed to send group signup owner alert email", ownerEmailError);
+    }
+  }
+
+  revalidatePath("/admin/group-training");
+}
+
+async function addManualSignupAction(formData: FormData) {
+  "use server";
+
+  await requireAdminAccess();
+
+  const groupSessionId = parsePositiveInt(formData.get("group_session_id"), 0);
+  if (!groupSessionId) return;
+
+  const firstName = cleanRequiredText(formData.get("first_name"));
+  const lastName = cleanRequiredText(formData.get("last_name"));
+  const emergencyContact = cleanRequiredText(formData.get("emergency_contact"));
+  const contactEmail = cleanRequiredText(formData.get("contact_email"));
+  if (!firstName || !lastName || !emergencyContact || !contactEmail) return;
+  const contactPhone = cleanNullableText(formData.get("contact_phone"));
+
+  const sessionRows = (await sql`
+    SELECT
+      id::int AS id,
+      title,
+      session_date::text AS session_date,
+      session_date_end::text AS session_date_end,
+      location,
+      price::float8 AS price
+    FROM group_sessions
+    WHERE id = ${groupSessionId}
+    LIMIT 1
+  `) as unknown as SessionEmailRow[];
+  const session = sessionRows[0];
+  if (!session) return;
+
+  const hasPaid = String(formData.get("has_paid") ?? "") === "on";
+  const signupPrice = parseNullableMoney(formData.get("signup_price")) ?? session.price;
+  const amountPaidInput = parseNullableMoney(formData.get("amount_paid"));
+  const amountPaid = hasPaid ? amountPaidInput ?? signupPrice : null;
+
+  await sql`
+    INSERT INTO player_signups (
+      group_session_id,
+      first_name,
+      last_name,
+      emergency_contact,
+      contact_email,
+      contact_phone,
+      birthday,
+      foot,
+      team,
+      notes,
+      has_paid,
+      signup_price,
+      amount_paid
+    )
+    VALUES (
+      ${groupSessionId},
+      ${firstName},
+      ${lastName},
+      ${emergencyContact},
+      ${contactEmail},
+      ${contactPhone},
+      ${cleanNullableText(formData.get("birthday"))}::date,
+      ${cleanNullableText(formData.get("foot"))},
+      ${cleanNullableText(formData.get("team"))},
+      ${cleanNullableText(formData.get("notes"))},
+      ${hasPaid},
+      ${signupPrice},
+      ${amountPaid}
+    )
+  `;
+
+  if (hasPaid) {
+    const playerFullName = `${firstName} ${lastName}`.trim();
+    const ownerAlertEmail =
+      process.env.GROUP_SIGNUP_ALERT_EMAIL ||
+      process.env.GMAIL_USER_GROUPS ||
+      "davidfalesct@gmail.com";
+
+    try {
+      await sendGroupSignupConfirmationEmail({
+        to: contactEmail,
+        firstName,
+        playerNames: [playerFullName],
+        sessionTitle: session.title,
+        sessionDate: session.session_date,
+        sessionDateEnd: session.session_date_end,
+        location: session.location,
+        receiptUrl: null,
+        loginEmail: contactEmail,
+        loginPassword: null,
+      });
+    } catch (emailError) {
+      console.error("Failed to send group signup confirmation email", emailError);
+    }
+
+    try {
+      await sendGroupSignupOwnerNotificationEmail({
+        to: ownerAlertEmail,
+        playerNames: [playerFullName],
+        emergencyContact,
+        contactPhone,
+        contactEmail,
+        sessionTitle: session.title,
+        sessionDate: session.session_date,
+        sessionDateEnd: session.session_date_end,
+        location: session.location,
+        receiptUrl: null,
+        parentPortalUrl: PLAYER_DASHBOARD_URL,
+        parentLoginEmail: contactEmail,
+        parentLoginPassword: null,
+      });
+    } catch (ownerEmailError) {
+      console.error("Failed to send group signup owner alert email", ownerEmailError);
+    }
+  }
+
+  revalidatePath("/admin/group-training");
+}
+
 export default async function GroupTrainingPage() {
-  const [sessionRows, signupRows] = await Promise.all([
+  const [sessionRows, signupRows, appPlayerRows] = await Promise.all([
     sql`
       SELECT
         gs.id::int AS id,
@@ -356,6 +653,8 @@ export default async function GroupTrainingPage() {
         ps.foot,
         ps.team,
         ps.notes,
+        ps.signup_price::float8 AS signup_price,
+        ps.amount_paid::float8 AS amount_paid,
         ps.contact_email,
         ps.contact_phone,
         ps.emergency_contact,
@@ -431,10 +730,25 @@ export default async function GroupTrainingPage() {
       ) profile_match ON true
       ORDER BY ps.group_session_id DESC, ps.has_paid DESC, ps.created_at DESC
     `,
+    sql`
+      SELECT
+        p.id,
+        p.name,
+        p.birthdate::text AS birthdate,
+        p.dominant_foot,
+        p.team_level,
+        parent.name AS parent_name,
+        parent.email AS parent_email,
+        parent.phone AS parent_phone
+      FROM players p
+      LEFT JOIN parents parent ON parent.id = p.parent_id
+      ORDER BY p.name ASC, p.created_at DESC
+    `,
   ]);
 
   const sessions = sessionRows as unknown as GroupSessionRow[];
   const signups = signupRows as unknown as GroupSignupRow[];
+  const appPlayers = appPlayerRows as unknown as AppPlayerRow[];
 
   const signupsBySession = new Map<number, GroupSignupRow[]>();
   for (const signup of signups) {
@@ -566,6 +880,243 @@ export default async function GroupTrainingPage() {
               </div>
             </form>
           </details>
+        </section>
+
+        <section className="mb-8 rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Add Players to Group Sessions</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Add by selecting an app player, or manually enter a prospect/player.
+          </p>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <details className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-emerald-700">
+                Add From App Player
+              </summary>
+              <form action={addSignupFromAppPlayerAction} className="mt-4 grid gap-3">
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  Session
+                  <select
+                    name="group_session_id"
+                    required
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  >
+                    <option value="">Select session</option>
+                    {sessions.map((session) => (
+                      <option key={session.id} value={session.id}>
+                        #{session.id} - {session.title} ({formatDateTime(session.session_date)})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  App Player
+                  <select
+                    name="app_player_id"
+                    required
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  >
+                    <option value="">Select player</option>
+                    {appPlayers.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.name} - {player.parent_name || player.parent_email || "No parent label"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  Notes (optional)
+                  <textarea
+                    name="notes"
+                    rows={2}
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Signup Price (optional)
+                    <input
+                      name="signup_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800"
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Amount Paid (optional)
+                    <input
+                      name="amount_paid"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800"
+                    />
+                  </label>
+                </div>
+
+                <label className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  <input name="has_paid" type="checkbox" className="h-4 w-4" />
+                  Mark as paid
+                </label>
+
+                <details className="rounded-xl border border-emerald-200 bg-white p-3">
+                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Optional Contact Overrides
+                  </summary>
+                  <div className="mt-3 grid gap-3">
+                    <input
+                      name="emergency_contact_override"
+                      placeholder="Emergency contact override"
+                      className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm text-gray-800"
+                    />
+                    <input
+                      name="contact_email_override"
+                      type="email"
+                      placeholder="Contact email override"
+                      className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm text-gray-800"
+                    />
+                    <input
+                      name="contact_phone_override"
+                      placeholder="Contact phone override"
+                      className="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm text-gray-800"
+                    />
+                  </div>
+                </details>
+
+                <button
+                  type="submit"
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  Add App Player Signup
+                </button>
+              </form>
+            </details>
+
+            <details className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-amber-700">
+                Manual Add
+              </summary>
+              <form action={addManualSignupAction} className="mt-4 grid gap-3">
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  Session
+                  <select
+                    name="group_session_id"
+                    required
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  >
+                    <option value="">Select session</option>
+                    {sessions.map((session) => (
+                      <option key={session.id} value={session.id}>
+                        #{session.id} - {session.title} ({formatDateTime(session.session_date)})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    name="first_name"
+                    required
+                    placeholder="First name"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                  <input
+                    name="last_name"
+                    required
+                    placeholder="Last name"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    name="birthday"
+                    type="date"
+                    placeholder="Birthday"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                  <input
+                    name="foot"
+                    placeholder="Preferred foot"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                </div>
+
+                <input
+                  name="team"
+                  placeholder="Team"
+                  className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                />
+                <textarea
+                  name="notes"
+                  rows={2}
+                  placeholder="Notes"
+                  className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                />
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    name="emergency_contact"
+                    required
+                    placeholder="Emergency contact"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                  <input
+                    name="contact_phone"
+                    placeholder="Contact phone"
+                    className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                  />
+                </div>
+
+                <input
+                  name="contact_email"
+                  type="email"
+                  required
+                  placeholder="Contact email"
+                  className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                />
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Signup Price (optional)
+                    <input
+                      name="signup_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Amount Paid (optional)
+                    <input
+                      name="amount_paid"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                    />
+                  </label>
+                </div>
+
+                <label className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  <input name="has_paid" type="checkbox" className="h-4 w-4" />
+                  Mark as paid
+                </label>
+
+                <button
+                  type="submit"
+                  className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                >
+                  Add Manual Signup
+                </button>
+              </form>
+            </details>
+          </div>
         </section>
 
         <section className="space-y-5">
@@ -839,6 +1390,10 @@ export default async function GroupTrainingPage() {
                                   <div className="text-xs text-gray-600">
                                     Foot: {signup.foot || "-"} | Team: {signup.team || "-"}
                                   </div>
+                                  <div className="text-xs text-gray-600">
+                                    Price: {formatMoney(signup.signup_price)} | Paid:{" "}
+                                    {formatMoney(signup.amount_paid)}
+                                  </div>
                                   {signup.notes && (
                                     <div className="mt-1 text-xs text-gray-600">Notes: {signup.notes}</div>
                                   )}
@@ -947,6 +1502,10 @@ export default async function GroupTrainingPage() {
                                   </div>
                                   <div className="text-xs text-gray-600">
                                     Foot: {signup.foot || "-"} | Team: {signup.team || "-"}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    Price: {formatMoney(signup.signup_price)} | Paid:{" "}
+                                    {formatMoney(signup.amount_paid)}
                                   </div>
                                   {signup.notes && (
                                     <div className="mt-1 text-xs text-gray-600">Notes: {signup.notes}</div>
