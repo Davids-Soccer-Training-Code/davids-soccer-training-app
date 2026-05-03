@@ -251,6 +251,9 @@ export async function POST(request: NextRequest) {
       emergencyContact = cleanText(body.emergencyContact || parent.name || "Parent");
       contactPhone = cleanText(body.contactPhone || parent.phone || "");
       contactEmail = cleanText(body.contactEmail || parent.email || "").toLowerCase();
+      const currentParentEmail = normalizeText(parent.email);
+      const currentParentPhoneLookup = normalizePhoneForLookup(parent.phone);
+      const contactPhoneLookup = normalizePhoneForLookup(contactPhone);
 
       if (!emergencyContact || !contactEmail) {
         return NextResponse.json(
@@ -264,6 +267,60 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      if (contactPhone && contactPhoneLookup?.length !== 10) {
+        return NextResponse.json(
+          { error: "Please enter a 10-digit contact phone number." },
+          { status: 400 }
+        );
+      }
+
+      if (contactEmail !== currentParentEmail) {
+        const emailConflict = (await sql`
+          SELECT id
+          FROM parents
+          WHERE lower(email) = lower(${contactEmail})
+            AND id <> ${signedInParentId}
+          ORDER BY created_at ASC
+          LIMIT 1
+        `) as unknown as Array<{ id: string }>;
+
+        if (emailConflict[0]) {
+          return NextResponse.json(
+            {
+              error:
+                "That email belongs to another parent account. Log in with that account to continue signup.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      if (contactPhoneLookup && contactPhoneLookup !== currentParentPhoneLookup) {
+        const phoneConflict = (await sql`
+          SELECT id
+          FROM parents
+          WHERE (
+              regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = ${contactPhoneLookup}
+              OR right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ${contactPhoneLookup}
+            )
+            AND id <> ${signedInParentId}
+          ORDER BY created_at ASC
+          LIMIT 1
+        `) as unknown as Array<{ id: string }>;
+
+        if (phoneConflict[0]) {
+          return NextResponse.json(
+            {
+              error:
+                "That phone number belongs to another parent account. Log in with that account to continue signup.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      contactPhone = normalizePhoneForStorage(contactPhone) || "";
 
       const allPlayers = (await sql`
         SELECT
