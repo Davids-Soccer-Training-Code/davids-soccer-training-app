@@ -34,6 +34,11 @@ const sections = [
     description: "View all training time requests submitted by parents.",
     href: "/admin/training-requests",
   },
+  {
+    title: "Booking Requests",
+    description: "Manage slot-specific session booking requests from the public calendar.",
+    href: "/admin/booking-requests",
+  },
 ];
 
 export default function AdminPage() {

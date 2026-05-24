@@ -197,13 +197,7 @@ export default async function PlayersPage() {
 
         <div className="mt-10 flex flex-col items-center gap-2 text-center">
           <p className="text-sm text-gray-500">New player or ready to add more sessions?</p>
-          <TrainingRequestButton
-            defaultParentName={parent.name ?? ""}
-            defaultPlayerName={defaultPlayerName}
-            defaultPhone={parent.phone ?? ""}
-            defaultEmail={parent.email ?? ""}
-            defaultLocation={defaultLocation}
-          />
+          <TrainingRequestButton />
         </div>
       </main>
     </div>

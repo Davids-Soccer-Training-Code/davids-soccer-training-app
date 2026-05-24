@@ -59,6 +59,19 @@ export default async function Home() {
               Open portal
             </Link>
           </div>
+
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-600 p-6 shadow-sm lg:col-span-3">
+            <h3 className="text-lg font-semibold text-white">Book a private session</h3>
+            <p className="mt-2 text-sm text-emerald-100">
+              View open training slots and request a session. Available weekday mornings, weekday evenings, Saturdays, and Sundays.
+            </p>
+            <Link
+              href="/book"
+              className="mt-4 inline-flex rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            >
+              See available times
+            </Link>
+          </div>
         </section>
       </main>
     </div>
