@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
+import { calculatePlayerBirthMeta } from "@/lib/playerAge";
 import { ContentSubmissionsSection } from "./ContentSubmissionsSection";
 
 type Player = {
@@ -333,26 +334,6 @@ function SkillRatingRow({
   );
 }
 
-function calcBirthMeta(birthdate: string | null | undefined) {
-  if (!birthdate || !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) {
-    return {
-      age: null as number | null,
-      birthYear: null as number | null,
-      ageGroup: null as string | null,
-    };
-  }
-  const birthYear = Number(birthdate.slice(0, 4));
-  const [y, m, d] = birthdate.split("-").map(Number);
-  const now = new Date();
-  let age = now.getFullYear() - y;
-  const hasHadBirthday =
-    now.getMonth() + 1 > m || (now.getMonth() + 1 === m && now.getDate() >= d);
-  if (!hasHadBirthday) age -= 1;
-  if (age < 0 || age > 120) age = 0;
-  const ageGroup = age ? `U${age}` : null;
-  return { age, birthYear, ageGroup };
-}
-
 function formatDateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -431,7 +412,7 @@ export default function AdminPlayerClient(props: {
   >([]);
 
   const computed = useMemo(
-    () => calcBirthMeta(draft?.birthdate ?? null),
+    () => calculatePlayerBirthMeta(draft?.birthdate ?? null),
     [draft?.birthdate],
   );
 

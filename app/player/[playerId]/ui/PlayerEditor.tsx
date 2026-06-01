@@ -1,11 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import {
-  ageGroupFromAge,
-  calculateAgeFromBirthdate,
-  getBirthYearFromBirthdate,
-} from "@/lib/playerAge";
+import { calculatePlayerBirthMeta } from "@/lib/playerAge";
 
 type Player = {
   id: string;
@@ -143,10 +139,7 @@ export function PlayerEditor(props: { player: Player }) {
   }, [draft, props.player]);
 
   const computed = useMemo(() => {
-    const age = calculateAgeFromBirthdate(draft.birthdate);
-    const birthYear = getBirthYearFromBirthdate(draft.birthdate);
-    const ageGroup = ageGroupFromAge(age);
-    return { age, birthYear, ageGroup };
+    return calculatePlayerBirthMeta(draft.birthdate);
   }, [draft.birthdate]);
 
   const missing = {

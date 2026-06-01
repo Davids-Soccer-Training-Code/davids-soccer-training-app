@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AdminVideos } from "@/app/admin/ui/AdminVideos";
+import { calculatePlayerBirthMeta } from "@/lib/playerAge";
 
 type Parent = {
   id: string;
@@ -113,27 +114,6 @@ export default function AdminClient() {
     () => parents.find((p) => p.id === selectedParentId) ?? null,
     [parents, selectedParentId]
   );
-
-  function calcBirthMeta(birthdate: string | null | undefined) {
-    if (!birthdate || !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) {
-      return {
-        age: null as number | null,
-        birthYear: null as number | null,
-        ageGroup: null as string | null,
-      };
-    }
-    const birthYear = Number(birthdate.slice(0, 4));
-    const [y, m, d] = birthdate.split("-").map(Number);
-    const now = new Date();
-    let age = now.getFullYear() - y;
-    const hasHadBirthday =
-      now.getMonth() + 1 > m ||
-      (now.getMonth() + 1 === m && now.getDate() >= d);
-    if (!hasHadBirthday) age -= 1;
-    if (age < 0 || age > 120) age = 0;
-    const ageGroup = age ? `U${age}` : null;
-    return { age, birthYear, ageGroup };
-  }
 
   async function verify(code: string) {
     setAuthError(null);
@@ -457,7 +437,7 @@ export default function AdminClient() {
                         <Field
                           label="Computed (age / birth year / age group)"
                           value={(() => {
-                            const meta = calcBirthMeta(
+                            const meta = calculatePlayerBirthMeta(
                               (newPlayer.birthdate as
                                 | string
                                 | null
