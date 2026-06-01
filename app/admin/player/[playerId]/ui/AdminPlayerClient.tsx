@@ -119,6 +119,87 @@ type CallRequest = {
   created_at: string;
 };
 
+const BASELINE_LIST_FIELDS = [
+  "early_strengths",
+  "early_focus_areas",
+  "starting_direction",
+] as const;
+
+const PROGRESS_SKILL_FIELDS = [
+  "first_touch",
+  "dribbling",
+  "passing",
+  "shot_technique",
+  "vision",
+  "soccer_habits",
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function toTextareaString(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean).join("\n");
+  }
+  return typeof value === "string" ? value : "";
+}
+
+function editDraftContent(report: CoachingReport): Record<string, unknown> {
+  const content = isRecord(report.content) ? report.content : {};
+  if (report.type !== "baseline") return content;
+
+  return {
+    ...content,
+    early_strengths: toTextareaString(content.early_strengths),
+    early_focus_areas: toTextareaString(content.early_focus_areas),
+    starting_direction: toTextareaString(content.starting_direction),
+  };
+}
+
+function normalizeReportContentForSave(
+  type: CoachingReport["type"],
+  content: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type === "blurb") {
+    return { text: typeof content.text === "string" ? content.text : "" };
+  }
+
+  if (type === "baseline") {
+    const normalized: Record<string, unknown> = { ...content };
+    for (const field of BASELINE_LIST_FIELDS) {
+      normalized[field] = toStringList(content[field]);
+    }
+    return normalized;
+  }
+
+  const normalized: Record<string, unknown> = { ...content };
+  for (const field of PROGRESS_SKILL_FIELDS) {
+    const area = isRecord(content[field]) ? content[field] : {};
+    const rating = Number(area.rating);
+    normalized[field] = {
+      notes: typeof area.notes === "string" ? area.notes : "",
+      ...(Number.isFinite(rating) && rating >= 1 && rating <= 5 ? { rating } : {}),
+    };
+  }
+  return normalized;
+}
+
 async function api<T>(
   path: string,
   opts: RequestInit & { securityCode?: string },
@@ -567,7 +648,7 @@ export default function AdminPlayerClient(props: {
       const next = { ...prev };
       for (const r of list) {
         if (!next[r.id]) {
-          next[r.id] = { title: r.title, report_date: r.report_date, content: r.content };
+          next[r.id] = { title: r.title, report_date: r.report_date, content: editDraftContent(r) };
         }
       }
       return next;
@@ -582,7 +663,12 @@ export default function AdminPlayerClient(props: {
       {
         method: "POST",
         securityCode: code,
-        body: JSON.stringify({ type: crNewType, title, report_date: crNewDate, content: crNewContent }),
+        body: JSON.stringify({
+          type: crNewType,
+          title,
+          report_date: crNewDate,
+          content: normalizeReportContentForSave(crNewType, crNewContent),
+        }),
       },
     );
     setCrNewTitle("");
@@ -601,7 +687,14 @@ export default function AdminPlayerClient(props: {
       {
         method: "PATCH",
         securityCode: code,
-        body: JSON.stringify({ title, report_date: d.report_date, content: d.content }),
+        body: JSON.stringify({
+          title,
+          report_date: d.report_date,
+          content: normalizeReportContentForSave(
+            coachingReports.find((report) => report.id === reportId)?.type ?? "blurb",
+            d.content,
+          ),
+        }),
       },
     );
     await loadCoachingReports(code, pid);

@@ -7,10 +7,10 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 type BaselineContent = {
   early_coaching_read?: string;
-  early_strengths?: string[];
-  early_focus_areas?: string[];
+  early_strengths?: string[] | string;
+  early_focus_areas?: string[] | string;
   learning_notes?: string;
-  starting_direction?: string[];
+  starting_direction?: string[] | string;
 };
 
 type ProgressContent = {
@@ -96,11 +96,42 @@ function RatingDots({ rating }: { rating?: number }) {
   );
 }
 
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function toText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
 // ─── Content renderers ───────────────────────────────────────────────────────
 
 function BaselineBody({ content }: { content: BaselineContent }) {
-  const bullets = (items?: string[]) =>
-    items?.filter(Boolean).map((s, i) => (
+  const earlyCoachingRead = toText(content.early_coaching_read);
+  const learningNotes = toText(content.learning_notes);
+  const earlyStrengths = toStringList(content.early_strengths);
+  const earlyFocusAreas = toStringList(content.early_focus_areas);
+  const startingDirection = toStringList(content.starting_direction);
+
+  const bullets = (items: string[]) =>
+    items.map((s, i) => (
       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
         {s}
@@ -109,44 +140,44 @@ function BaselineBody({ content }: { content: BaselineContent }) {
 
   return (
     <div className="space-y-5">
-      {content.early_coaching_read && (
+      {earlyCoachingRead && (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Early Coaching Read
           </div>
-          <p className="text-sm leading-relaxed text-gray-700">{content.early_coaching_read}</p>
+          <p className="text-sm leading-relaxed text-gray-700">{earlyCoachingRead}</p>
         </div>
       )}
-      {content.early_strengths?.length ? (
+      {earlyStrengths.length ? (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Early Strengths
           </div>
-          <ul className="space-y-1.5">{bullets(content.early_strengths)}</ul>
+          <ul className="space-y-1.5">{bullets(earlyStrengths)}</ul>
         </div>
       ) : null}
-      {content.early_focus_areas?.length ? (
+      {earlyFocusAreas.length ? (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Early Focus Areas
           </div>
-          <ul className="space-y-1.5">{bullets(content.early_focus_areas)}</ul>
+          <ul className="space-y-1.5">{bullets(earlyFocusAreas)}</ul>
         </div>
       ) : null}
-      {content.learning_notes && (
+      {learningNotes && (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Learning & Training Notes
           </div>
-          <p className="text-sm leading-relaxed text-gray-700">{content.learning_notes}</p>
+          <p className="text-sm leading-relaxed text-gray-700">{learningNotes}</p>
         </div>
       )}
-      {content.starting_direction?.length ? (
+      {startingDirection.length ? (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Starting Training Direction
           </div>
-          <ul className="space-y-1.5">{bullets(content.starting_direction)}</ul>
+          <ul className="space-y-1.5">{bullets(startingDirection)}</ul>
         </div>
       ) : null}
     </div>
@@ -187,8 +218,8 @@ function ProgressBody({ content }: { content: ProgressContent }) {
                     </span>
                     <RatingDots rating={area.rating} />
                   </div>
-                  {area.notes && (
-                    <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{area.notes}</p>
+                  {toText(area.notes) && (
+                    <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{toText(area.notes)}</p>
                   )}
                 </div>
               );
@@ -196,28 +227,28 @@ function ProgressBody({ content }: { content: ProgressContent }) {
           </div>
         </div>
       )}
-      {content.overall_strengths && (
+      {toText(content.overall_strengths) && (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Overall Strengths
           </div>
-          <p className="text-sm leading-relaxed text-gray-700">{content.overall_strengths}</p>
+          <p className="text-sm leading-relaxed text-gray-700">{toText(content.overall_strengths)}</p>
         </div>
       )}
-      {content.continue_focus && (
+      {toText(content.continue_focus) && (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Where to Continue Focus
           </div>
-          <p className="text-sm leading-relaxed text-gray-700">{content.continue_focus}</p>
+          <p className="text-sm leading-relaxed text-gray-700">{toText(content.continue_focus)}</p>
         </div>
       )}
-      {content.long_term_goals && (
+      {toText(content.long_term_goals) && (
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Long-Term Goals
           </div>
-          <p className="text-sm leading-relaxed text-gray-700">{content.long_term_goals}</p>
+          <p className="text-sm leading-relaxed text-gray-700">{toText(content.long_term_goals)}</p>
         </div>
       )}
     </div>
@@ -227,7 +258,7 @@ function ProgressBody({ content }: { content: ProgressContent }) {
 function BlurbBody({ content }: { content: BlurbContent }) {
   return (
     <p className="text-sm leading-relaxed text-gray-700 whitespace-pre-line">
-      {content.text ?? ""}
+      {toText(content.text)}
     </p>
   );
 }
@@ -272,13 +303,13 @@ function ReportCard({ report }: { report: CoachingReport }) {
       {open && (
         <div className="border-t border-white/60 bg-white/70 px-5 py-5">
           {report.type === "baseline" && (
-            <BaselineBody content={report.content as BaselineContent} />
+            <BaselineBody content={asObject(report.content) as BaselineContent} />
           )}
           {report.type === "progress" && (
-            <ProgressBody content={report.content as ProgressContent} />
+            <ProgressBody content={asObject(report.content) as ProgressContent} />
           )}
           {report.type === "blurb" && (
-            <BlurbBody content={report.content as BlurbContent} />
+            <BlurbBody content={asObject(report.content) as BlurbContent} />
           )}
         </div>
       )}
@@ -296,7 +327,9 @@ export function PlayerCoachingReports({ playerId }: { playerId: string }) {
   useEffect(() => {
     fetch(`/api/players/${playerId}/coaching-reports`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
-      .then((data: { reports: CoachingReport[] }) => setReports(data.reports))
+      .then((data: { reports?: CoachingReport[] }) =>
+        setReports(Array.isArray(data.reports) ? data.reports : []),
+      )
       .catch(() => setError("Failed to load reports."))
       .finally(() => setLoading(false));
   }, [playerId]);
