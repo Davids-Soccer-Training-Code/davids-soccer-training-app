@@ -52,6 +52,12 @@ export default async function BookPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-10">
+        <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="font-semibold">Important:</span> If you book less than 24
+          hours in advance, there&apos;s a chance Coach David won&apos;t see your
+          request in time. Please text or call him directly to confirm the session.
+        </div>
+
         <div className="mb-8">
           <p className="text-sm text-gray-600 max-w-xl">
             Pick an open slot below and fill in your details. Your request will be held
