@@ -2,37 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Unlock } from "lucide-react";
+import { getSlotsForCoachDow, type SlotDef } from "@/lib/bookingSchedule";
 
 // ── Slot generation ────────────────────────────────────────────────────────────
-
-type SlotDef = { start: string; end: string };
-
-const WEEKDAY_SLOTS: SlotDef[] = [
-  { start: "08:00", end: "09:00" },
-  { start: "09:00", end: "10:00" },
-  { start: "10:00", end: "11:00" },
-  { start: "11:00", end: "12:00" },
-  { start: "17:30", end: "18:30" },
-  { start: "18:30", end: "19:30" },
-];
-
-const SATURDAY_SLOTS: SlotDef[] = [
-  { start: "17:30", end: "18:30" },
-  { start: "18:30", end: "19:30" },
-];
-
-const SUNDAY_SLOTS: SlotDef[] = [
-  { start: "08:00", end: "09:00" },
-  { start: "09:00", end: "10:00" },
-  { start: "10:00", end: "11:00" },
-  { start: "11:00", end: "12:00" },
-];
-
-function getSlotsForDow(dow: number): SlotDef[] {
-  if (dow >= 1 && dow <= 5) return WEEKDAY_SLOTS;
-  if (dow === 6) return SATURDAY_SLOTS;
-  return SUNDAY_SLOTS;
-}
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -41,16 +13,30 @@ function toDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-type DaySlots = { date: string; label: string; slots: SlotDef[] };
+// A slot the user can pick, tagged with which coach it belongs to. The same
+// time can appear twice (once per coach) in the "all" view.
+type CoachSlot = SlotDef & { coach: string };
+type DaySlots = { date: string; label: string; slots: CoachSlot[] };
 
-function generateDays(weeks = 6): DaySlots[] {
+// "all" expands to both coaches (David first, then Simon); otherwise just the one.
+function coachesFor(coach: string): string[] {
+  return coach === "all" ? ["david", "simon"] : [coach];
+}
+
+function generateDays(coach: string, weeks = 6): DaySlots[] {
+  const coaches = coachesFor(coach);
   const days: DaySlots[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   for (let i = 0; i < weeks * 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    const slots = getSlotsForDow(d.getDay());
+    const slots: CoachSlot[] = [];
+    for (const c of coaches) {
+      for (const s of getSlotsForCoachDow(c, d.getDay())) {
+        slots.push({ ...s, coach: c });
+      }
+    }
     if (!slots.length) continue;
     days.push({
       date: toDateStr(d),
@@ -71,13 +57,21 @@ function fmt(t: string): string {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type BookedSlot = { date: string; start: string };
-type AdminBlocked = { id: string; date: string; start: string };
-type FormState = { date: string; start: string; end: string; dateLabel: string };
+type BookedSlot = { date: string; start: string; coach: string };
+type AdminBlocked = { id: string; date: string; start: string; coach: string };
+type FormState = { date: string; start: string; end: string; dateLabel: string; coach: string };
+
+const COACH_LABEL: Record<string, string> = { david: "Coach David", simon: "Coach Simon" };
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean }) {
+export default function BookingCalendar({
+  isAdmin = false,
+  coach = "david",
+}: {
+  isAdmin?: boolean;
+  coach?: string;
+}) {
   const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
   const [adminBlocked, setAdminBlocked] = useState<AdminBlocked[]>([]);
   const [locallyBooked, setLocallyBooked] = useState<BookedSlot[]>([]);
@@ -98,7 +92,7 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
   const [unblocking, setUnblocking] = useState<string | null>(null); // id being unblocked
 
   useEffect(() => {
-    fetch("/api/booking-requests", { cache: "no-store" })
+    fetch(`/api/booking-requests?coach=${encodeURIComponent(coach)}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data: { bookedSlots: BookedSlot[]; adminBlocked?: AdminBlocked[] }) => {
         setBookedSlots(data.bookedSlots ?? []);
@@ -106,37 +100,70 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
       })
       .catch(() => {})
       .finally(() => setLoadingSlots(false));
-  }, []);
+  }, [coach]);
 
   const allBooked = useMemo(() => [...bookedSlots, ...locallyBooked], [bookedSlots, locallyBooked]);
 
   const norm = (s: string) => s.slice(0, 5);
 
-  function isBooked(date: string, start: string): boolean {
-    return allBooked.some((b) => b.date === date && norm(b.start) === norm(start));
+  function isBooked(date: string, start: string, slotCoach: string): boolean {
+    return allBooked.some(
+      (b) => b.date === date && norm(b.start) === norm(start) && b.coach === slotCoach
+    );
   }
 
-  function getAdminBlockId(date: string, start: string): string | null {
-    return adminBlocked.find((b) => b.date === date && norm(b.start) === norm(start))?.id ?? null;
+  function getAdminBlockId(date: string, start: string, slotCoach: string): string | null {
+    return (
+      adminBlocked.find(
+        (b) => b.date === date && norm(b.start) === norm(start) && b.coach === slotCoach
+      )?.id ?? null
+    );
   }
 
-  const days = useMemo(() => generateDays(6), []);
+  const isAll = coach === "all";
+  const days = useMemo(() => generateDays(coach, 6), [coach]);
 
-  const weeks = useMemo(() => {
-    const groups: DaySlots[][] = [];
-    let current: DaySlots[] = [];
-    for (const day of days) {
-      current.push(day);
-      if (current.length === 7 || day === days[days.length - 1]) {
-        groups.push(current);
-        current = [];
+  // Annotate each (visible) day with a month/week header to render before it.
+  // Weeks are real calendar weeks (Sunday-start), and months are separated
+  // properly — so the day a slot belongs to is unmistakable.
+  const rows = useMemo(() => {
+    const visible = days.filter((day) =>
+      day.slots.some(
+        (s) =>
+          isAdmin ||
+          !allBooked.some(
+            (b) => b.date === day.date && norm(b.start) === norm(s.start) && b.coach === s.coach
+          )
+      )
+    );
+    let lastMonth = "";
+    let lastWeek = "";
+    return visible.map((day) => {
+      const d = new Date(day.date + "T12:00:00");
+      const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+      const monthLabel = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+      const sunday = new Date(d);
+      sunday.setDate(d.getDate() - d.getDay());
+      const weekKey = toDateStr(sunday);
+      const weekLabel = `Week of ${sunday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+
+      let newMonth: string | null = null;
+      let newWeek: string | null = null;
+      if (monthKey !== lastMonth) {
+        newMonth = monthLabel;
+        lastMonth = monthKey;
       }
-    }
-    return groups;
-  }, [days]);
+      if (weekKey !== lastWeek) {
+        newWeek = weekLabel;
+        lastWeek = weekKey;
+      }
+      return { day, newMonth, newWeek };
+    });
+  }, [days, allBooked, isAdmin]);
 
-  function openForm(date: string, start: string, end: string, dateLabel: string) {
-    setForm({ date, start, end, dateLabel });
+  function openForm(date: string, start: string, end: string, dateLabel: string, slotCoach: string) {
+    setForm({ date, start, end, dateLabel, coach: slotCoach });
     setSubmitted(false);
     setError(null);
     setTimeout(() => {
@@ -144,18 +171,18 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
     }, 50);
   }
 
-  async function handleAdminBlock(date: string, start: string, end: string) {
-    const key = `${date}|${start}`;
+  async function handleAdminBlock(date: string, start: string, end: string, slotCoach: string) {
+    const key = `${slotCoach}|${date}|${start}`;
     setBlocking(key);
     try {
       const res = await fetch("/api/booking-requests", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ admin_block: true, slot_date: date, slot_start: start, slot_end: end }),
+        body: JSON.stringify({ admin_block: true, slot_date: date, slot_start: start, slot_end: end, coach: slotCoach }),
       });
       if (res.ok) {
         const data = (await res.json()) as { blocked?: AdminBlocked };
-        setLocallyBooked((prev) => [...prev, { date, start }]);
+        setLocallyBooked((prev) => [...prev, { date, start, coach: slotCoach }]);
         if (data.blocked) {
           setAdminBlocked((prev) => [...prev, data.blocked!]);
         }
@@ -165,14 +192,16 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
     }
   }
 
-  async function handleAdminUnblock(id: string, date: string, start: string) {
+  async function handleAdminUnblock(id: string, date: string, start: string, slotCoach: string) {
     setUnblocking(id);
     try {
       const res = await fetch(`/api/admin/booking-requests/${id}`, { method: "DELETE" });
       if (res.ok || res.status === 204) {
+        const sameSlot = (b: BookedSlot) =>
+          b.date === date && norm(b.start) === norm(start) && b.coach === slotCoach;
         setAdminBlocked((prev) => prev.filter((b) => b.id !== id));
-        setBookedSlots((prev) => prev.filter((b) => !(b.date === date && norm(b.start) === norm(start))));
-        setLocallyBooked((prev) => prev.filter((b) => !(b.date === date && norm(b.start) === norm(start))));
+        setBookedSlots((prev) => prev.filter((b) => !sameSlot(b)));
+        setLocallyBooked((prev) => prev.filter((b) => !sameSlot(b)));
       }
     } finally {
       setUnblocking(null);
@@ -197,11 +226,12 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
           slot_date: form.date,
           slot_start: form.start,
           slot_end: form.end,
+          coach: form.coach,
         }),
       });
       if (res.status === 409) { setError("That slot was just taken. Please pick another time."); setSubmitting(false); return; }
       if (!res.ok) { setError((await res.text().catch(() => "")) || "Something went wrong."); setSubmitting(false); return; }
-      setLocallyBooked((prev) => [...prev, { date: form.date, start: form.start }]);
+      setLocallyBooked((prev) => [...prev, { date: form.date, start: form.start, coach: form.coach }]);
       setSubmitted(true);
       setParentName(""); setPlayerName(""); setPhone(""); setEmail(""); setNotes("");
     } catch {
@@ -216,39 +246,68 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
       {loadingSlots ? (
         <div className="py-16 text-center text-sm text-gray-400">Loading available times…</div>
       ) : (
-        <div className="space-y-8">
-          {weeks.map((week, wi) => (
-            <div key={wi}>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400">
-                Week of{" "}
-                {new Date(week[0].date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" })}
-              </h2>
-              <div className="space-y-3">
-                {week.map((day) => {
-                  const anyVisible = day.slots.some((s) => !isBooked(day.date, s.start) || isAdmin);
-                  if (!anyVisible) return null;
+        <div className="space-y-3">
+          {rows.map(({ day, newMonth, newWeek }) => {
+            const d = new Date(day.date + "T12:00:00");
+            const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+            const dateLine = d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
-                  return (
-                    <div key={day.date} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3 text-sm font-semibold text-gray-800">{day.label}</div>
-                      <div className="flex flex-wrap gap-2">
+            return (
+              <div key={day.date}>
+                {newMonth && (
+                  <h2 className="mb-3 mt-8 border-b-2 border-emerald-200 pb-2 text-lg font-bold tracking-tight text-emerald-800 first:mt-0">
+                    {newMonth}
+                  </h2>
+                )}
+                {newWeek && (
+                  <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                    {newWeek}
+                  </h3>
+                )}
+
+                <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+                  <div className="border-l-4 border-emerald-500 bg-emerald-50/60 px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                      {weekday}
+                    </div>
+                    <div className="text-2xl font-extrabold leading-tight tracking-tight text-gray-900">
+                      {dateLine}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 p-4">
                         {day.slots.map((slot) => {
-                          const booked = isBooked(day.date, slot.start);
-                          const blockId = getAdminBlockId(day.date, slot.start);
-                          const isSelected = form?.date === day.date && form.start === slot.start;
-                          const blockKey = `${day.date}|${slot.start}`;
+                          const booked = isBooked(day.date, slot.start, slot.coach);
+                          const blockId = getAdminBlockId(day.date, slot.start, slot.coach);
+                          const isSelected =
+                            form?.date === day.date && form.start === slot.start && form.coach === slot.coach;
+                          const slotKey = `${slot.coach}-${slot.start}`;
+                          const blockKey = `${slot.coach}|${day.date}|${slot.start}`;
+                          // In the "all" view, set Coach Simon's slots apart in blue with a label.
+                          const tagSimon = isAll && slot.coach === "simon";
+                          const coachTag = tagSimon ? (
+                            <span
+                              className={
+                                isSelected
+                                  ? "ml-1 text-[11px] font-semibold text-white"
+                                  : "ml-1 text-[11px] font-semibold text-sky-700"
+                              }
+                            >
+                              (Coach Simon)
+                            </span>
+                          ) : null;
 
                           // Admin view of an admin-blocked slot — show with unblock button
                           if (isAdmin && booked && blockId) {
                             return (
-                              <div key={slot.start} className="flex items-center gap-1 rounded-xl border border-orange-200 bg-orange-50 px-2 py-1.5">
+                              <div key={slotKey} className="flex items-center gap-1 rounded-xl border border-orange-200 bg-orange-50 px-2 py-1.5">
                                 <span className="text-xs font-medium text-orange-400 line-through">
                                   {fmt(slot.start)} – {fmt(slot.end)}
                                 </span>
+                                {coachTag}
                                 <button
                                   type="button"
                                   disabled={unblocking === blockId}
-                                  onClick={() => void handleAdminUnblock(blockId, day.date, slot.start)}
+                                  onClick={() => void handleAdminUnblock(blockId, day.date, slot.start, slot.coach)}
                                   title="Unblock this slot"
                                   className="ml-1 rounded-lg p-0.5 text-orange-500 hover:bg-orange-100 disabled:opacity-50"
                                 >
@@ -261,9 +320,9 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
                           // Already booked by a parent (or CRM session) — greyed out for everyone
                           if (booked) {
                             return (
-                              <button key={slot.start} type="button" disabled
+                              <button key={slotKey} type="button" disabled
                                 className="cursor-not-allowed rounded-xl border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-300 line-through">
-                                {fmt(slot.start)} – {fmt(slot.end)}
+                                {fmt(slot.start)} – {fmt(slot.end)}{coachTag}
                               </button>
                             );
                           }
@@ -271,22 +330,30 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
                           // Available slot — admin gets a lock icon to block it
                           if (isAdmin) {
                             return (
-                              <div key={slot.start} className="flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                              <div
+                                key={slotKey}
+                                className={
+                                  tagSimon
+                                    ? "flex items-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-2 py-1.5"
+                                    : "flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-1.5"
+                                }
+                              >
                                 <button
                                   type="button"
-                                  onClick={() => openForm(day.date, slot.start, slot.end, day.label)}
+                                  onClick={() => openForm(day.date, slot.start, slot.end, day.label, slot.coach)}
                                   className={
-                                    isSelected
-                                      ? "text-xs font-semibold text-emerald-900 underline"
-                                      : "text-xs font-semibold text-emerald-700 hover:underline"
+                                    tagSimon
+                                      ? (isSelected ? "text-xs font-semibold text-sky-900 underline" : "text-xs font-semibold text-sky-700 hover:underline")
+                                      : (isSelected ? "text-xs font-semibold text-emerald-900 underline" : "text-xs font-semibold text-emerald-700 hover:underline")
                                   }
                                 >
                                   {fmt(slot.start)} – {fmt(slot.end)}
                                 </button>
+                                {coachTag}
                                 <button
                                   type="button"
                                   disabled={blocking === blockKey}
-                                  onClick={() => void handleAdminBlock(day.date, slot.start, slot.end)}
+                                  onClick={() => void handleAdminBlock(day.date, slot.start, slot.end, slot.coach)}
                                   title="Block this slot"
                                   className="ml-1 rounded-lg p-0.5 text-emerald-400 hover:bg-emerald-100 hover:text-orange-500 disabled:opacity-50"
                                 >
@@ -296,29 +363,30 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
                             );
                           }
 
-                          // Normal public available slot
+                          // Normal public available slot — Simon's are blue in "all" view
+                          const baseClass = tagSimon
+                            ? (isSelected
+                                ? "rounded-xl border border-sky-600 bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow"
+                                : "rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:border-sky-400 hover:bg-sky-100")
+                            : (isSelected
+                                ? "rounded-xl border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow"
+                                : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100");
                           return (
                             <button
-                              key={slot.start}
+                              key={slotKey}
                               type="button"
-                              onClick={() => openForm(day.date, slot.start, slot.end, day.label)}
-                              className={
-                                isSelected
-                                  ? "rounded-xl border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow"
-                                  : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
-                              }
+                              onClick={() => openForm(day.date, slot.start, slot.end, day.label, slot.coach)}
+                              className={baseClass}
                             >
-                              {fmt(slot.start)} – {fmt(slot.end)}
+                              {fmt(slot.start)} – {fmt(slot.end)}{coachTag}
                             </button>
                           );
                         })}
-                      </div>
-                    </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -332,6 +400,7 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
               <p className="mt-2 text-sm text-gray-600">
                 Your request for{" "}
                 <span className="font-medium">{form.dateLabel} {fmt(form.start)} – {fmt(form.end)}</span>{" "}
+                with <span className="font-medium">{COACH_LABEL[form.coach] ?? "Coach David"}</span>{" "}
                 has been submitted. We&apos;ll reach out to confirm shortly.
               </p>
               <button type="button" onClick={() => setForm(null)}
@@ -342,8 +411,16 @@ export default function BookingCalendar({ isAdmin = false }: { isAdmin?: boolean
           ) : (
             <>
               <div className="mb-5">
-                <h3 className="text-base font-semibold text-gray-900">Request this slot</h3>
-                <p className="mt-0.5 text-sm text-emerald-700 font-medium">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Request this slot with {COACH_LABEL[form.coach] ?? "Coach David"}
+                </h3>
+                <p
+                  className={
+                    form.coach === "simon"
+                      ? "mt-0.5 text-sm font-medium text-sky-700"
+                      : "mt-0.5 text-sm font-medium text-emerald-700"
+                  }
+                >
                   {form.dateLabel} &middot; {fmt(form.start)} – {fmt(form.end)}
                 </p>
                 <p className="mt-1 text-xs text-gray-500">

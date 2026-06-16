@@ -18,7 +18,7 @@ export default async function BookingRequestsPage() {
            slot_date::text AS slot_date,
            to_char(slot_start, 'HH24:MI') AS slot_start,
            to_char(slot_end,   'HH24:MI') AS slot_end,
-           notes, status, created_at
+           notes, status, coach, created_at
     FROM session_booking_requests
     ORDER BY slot_date ASC, slot_start ASC
   `) as unknown as BookingRequest[];

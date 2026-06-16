@@ -2,36 +2,20 @@ import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { sendSmsViaTwilio } from "@/lib/twilio";
+import { getSlotsForCoachDow } from "@/lib/bookingSchedule";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Slot definitions per day-of-week (0=Sun … 6=Sat)
-const WEEKDAY_SLOTS = [
-  { start: "08:00", end: "09:00" },
-  { start: "09:00", end: "10:00" },
-  { start: "10:00", end: "11:00" },
-  { start: "11:00", end: "12:00" },
-  { start: "17:30", end: "18:30" },
-  { start: "18:30", end: "19:30" },
-];
+// Which coaches can take bookings. Anything unrecognized falls back to David.
+const COACH_LABELS: Record<string, string> = {
+  david: "Coach David",
+  simon: "Coach Simon",
+};
 
-const SATURDAY_SLOTS = [
-  { start: "17:30", end: "18:30" },
-  { start: "18:30", end: "19:30" },
-];
-
-const SUNDAY_SLOTS = [
-  { start: "08:00", end: "09:00" },
-  { start: "09:00", end: "10:00" },
-  { start: "10:00", end: "11:00" },
-  { start: "11:00", end: "12:00" },
-];
-
-function getSlotsForDay(dow: number) {
-  if (dow >= 1 && dow <= 5) return WEEKDAY_SLOTS;
-  if (dow === 6) return SATURDAY_SLOTS;
-  return SUNDAY_SLOTS; // Sunday
+function normalizeCoach(value: unknown): string {
+  const c = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return c in COACH_LABELS ? c : "david";
 }
 
 export type Slot = {
@@ -47,6 +31,11 @@ export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.AUTH_SECRET });
   const isAdmin = token?.isAdmin === true;
 
+  // coach=all returns every coach's slots (each tagged); otherwise one coach.
+  const coachParam = req.nextUrl.searchParams.get("coach");
+  const all = coachParam === "all";
+  const coach = normalizeCoach(coachParam);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const sixWeeks = new Date(today);
@@ -55,25 +44,33 @@ export async function GET(req: NextRequest) {
   const todayStr = today.toISOString().slice(0, 10);
   const endStr = sixWeeks.toISOString().slice(0, 10);
 
-  // Pending/confirmed/blocked booking requests — all block the slot on the calendar
+  // Pending/confirmed/blocked booking requests — all block the slot. Each row is
+  // tagged with its coach so the calendar can keep coaches' slots separate.
   const booked = (await sql`
-    SELECT slot_date::text AS date, to_char(slot_start, 'HH24:MI') AS start
+    SELECT slot_date::text AS date, to_char(slot_start, 'HH24:MI') AS start, coach
     FROM session_booking_requests
     WHERE status IN ('pending', 'confirmed', 'blocked')
+      AND (${all} OR coach = ${coach})
       AND slot_date >= ${todayStr}::date
       AND slot_date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string }>;
+  `) as unknown as Array<{ date: string; start: string; coach: string }>;
 
   // For admins, also return blocked-by-admin entries with IDs so they can unblock
   const adminBlocked = isAdmin
     ? ((await sql`
-        SELECT id, slot_date::text AS date, to_char(slot_start, 'HH24:MI') AS start
+        SELECT id, slot_date::text AS date, to_char(slot_start, 'HH24:MI') AS start, coach
         FROM session_booking_requests
         WHERE status = 'blocked'
+          AND (${all} OR coach = ${coach})
           AND slot_date >= ${todayStr}::date
           AND slot_date <= ${endStr}::date
-      `) as unknown as Array<{ id: string; date: string; start: string }>)
+      `) as unknown as Array<{ id: string; date: string; start: string; coach: string }>)
     : [];
+
+  // CRM sessions are Coach David's own calendar — only block David's availability.
+  if (!all && coach !== "david") {
+    return Response.json({ bookedSlots: booked, adminBlocked });
+  }
 
   // CRM sessions: session_date is stored as UTC in a TIMESTAMP WITHOUT TZ column.
   // Cast to TIMESTAMPTZ (so Postgres treats the raw value as UTC), then convert
@@ -98,8 +95,11 @@ export async function GET(req: NextRequest) {
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
   `) as unknown as Array<{ date: string; start: string }>;
 
+  // CRM sessions belong to Coach David — tag them so the calendar treats them as his.
+  const crmDavid = [...crmRegular, ...crmFirst].map((s) => ({ ...s, coach: "david" }));
+
   return Response.json({
-    bookedSlots: [...booked, ...crmRegular, ...crmFirst],
+    bookedSlots: [...booked, ...crmDavid],
     adminBlocked,
   });
 }
@@ -111,8 +111,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return new Response("Invalid JSON", { status: 400 });
 
-  const { parent_name, player_name, phone, email, notes, slot_date, slot_start, slot_end, admin_block } =
+  const { parent_name, player_name, phone, email, notes, slot_date, slot_start, slot_end, admin_block, coach: coachRaw } =
     body as Record<string, unknown>;
+
+  const coach = normalizeCoach(coachRaw);
 
   // Admin blocking a slot
   if (admin_block === true) {
@@ -123,20 +125,20 @@ export async function POST(req: NextRequest) {
     if (!slot_start || typeof slot_start !== "string") return new Response("slot_start required", { status: 400 });
     if (!slot_end || typeof slot_end !== "string") return new Response("slot_end required", { status: 400 });
 
-    // Validate slot is in schedule
+    // Validate slot is in this coach's schedule
     const dow = new Date(slot_date + "T12:00:00").getDay();
-    const validSlots = getSlotsForDay(dow);
+    const validSlots = getSlotsForCoachDow(coach, dow);
     if (!validSlots.some((s) => s.start === slot_start && s.end === slot_end)) {
       return new Response("Invalid slot", { status: 400 });
     }
 
     const rows = (await sql`
       INSERT INTO session_booking_requests
-        (parent_name, player_name, slot_date, slot_start, slot_end, status)
-      VALUES ('Admin', 'Blocked', ${slot_date}::date, ${slot_start}::time, ${slot_end}::time, 'blocked')
+        (parent_name, player_name, slot_date, slot_start, slot_end, status, coach)
+      VALUES ('Admin', 'Blocked', ${slot_date}::date, ${slot_start}::time, ${slot_end}::time, 'blocked', ${coach})
       ON CONFLICT DO NOTHING
-      RETURNING id, slot_date::text AS slot_date, to_char(slot_start,'HH24:MI') AS slot_start
-    `) as unknown as Array<{ id: string; slot_date: string; slot_start: string }>;
+      RETURNING id, slot_date::text AS date, to_char(slot_start,'HH24:MI') AS start, coach
+    `) as unknown as Array<{ id: string; date: string; start: string; coach: string }>;
 
     return Response.json({ blocked: rows[0] ?? null }, { status: 201 });
   }
@@ -157,19 +159,20 @@ export async function POST(req: NextRequest) {
     return new Response("slot_end is required", { status: 400 });
   }
 
-  // Validate the slot is in our schedule
+  // Validate the slot is in this coach's schedule
   const dow = new Date(slot_date + "T12:00:00").getDay();
-  const validSlots = getSlotsForDay(dow);
+  const validSlots = getSlotsForCoachDow(coach, dow);
   const isValid = validSlots.some((s) => s.start === slot_start && s.end === slot_end);
   if (!isValid) {
     return new Response("Invalid slot", { status: 400 });
   }
 
-  // Check if already booked
+  // Check if already booked for this coach
   const conflict = (await sql`
     SELECT 1 FROM session_booking_requests
     WHERE slot_date = ${slot_date}::date
       AND slot_start = ${slot_start}::time
+      AND coach = ${coach}
       AND status IN ('pending', 'confirmed', 'blocked')
     LIMIT 1
   `) as unknown as Array<unknown>;
@@ -180,7 +183,7 @@ export async function POST(req: NextRequest) {
 
   const rows = (await sql`
     INSERT INTO session_booking_requests
-      (parent_name, player_name, phone, email, slot_date, slot_start, slot_end, notes)
+      (parent_name, player_name, phone, email, slot_date, slot_start, slot_end, notes, coach)
     VALUES (
       ${parent_name.trim()},
       ${player_name.trim()},
@@ -189,7 +192,8 @@ export async function POST(req: NextRequest) {
       ${slot_date}::date,
       ${slot_start}::time,
       ${slot_end}::time,
-      ${notes && typeof notes === "string" ? notes.trim() || null : null}
+      ${notes && typeof notes === "string" ? notes.trim() || null : null},
+      ${coach}
     )
     RETURNING id, status, created_at
   `) as unknown as Array<{ id: string; status: string; created_at: string }>;
@@ -213,9 +217,10 @@ export async function POST(req: NextRequest) {
 
   // Send SMS before returning — fire-and-forget inside serverless kills the
   // function after the response is sent, so we await here and swallow errors.
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  // Always point the review link at the live admin, never localhost.
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://app.davidssoccertraining.com";
   await sendSmsViaTwilio(
-    `📅 Session request from ${parent_name.trim()} for ${player_name.trim()}.\n` +
+    `📅 Session request with ${COACH_LABELS[coach]} from ${parent_name.trim()} for ${player_name.trim()}.\n` +
     `Slot: ${slotDateLabel} ${fmt(slot_start)} – ${fmt(slot_end)}.\n` +
     `Phone: ${phone ?? "—"}  Email: ${email ?? "—"}.\n` +
     `Review: ${baseUrl}/admin/booking-requests`,

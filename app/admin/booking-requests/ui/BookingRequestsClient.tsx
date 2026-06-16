@@ -14,8 +14,18 @@ export type BookingRequest = {
   slot_end: string;
   notes: string | null;
   status: "pending" | "confirmed" | "cancelled" | "blocked";
+  coach: string | null;
   created_at: string;
 };
+
+const COACH_LABELS: Record<string, string> = {
+  david: "Coach David",
+  simon: "Coach Simon",
+};
+
+function coachLabel(coach: string | null): string {
+  return COACH_LABELS[coach ?? "david"] ?? "Coach David";
+}
 
 function fmt(t: string): string {
   const [hStr, mStr] = t.split(":");
@@ -62,6 +72,9 @@ function RequestCard({
               className={`rounded-full border px-2 py-0.5 text-xs font-semibold capitalize ${statusBadge[r.status] ?? ""}`}
             >
               {r.status}
+            </span>
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+              {coachLabel(r.coach)}
             </span>
           </div>
           <div className="mt-0.5 text-sm text-gray-500">

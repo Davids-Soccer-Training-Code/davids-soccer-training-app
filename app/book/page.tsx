@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import BookingCalendar from "./BookingCalendar";
+import BookingSection from "./BookingSection";
 
 export const dynamic = "force-dynamic";
 
@@ -52,35 +52,7 @@ export default async function BookPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <span className="font-semibold">Important:</span> If you book less than 24
-          hours in advance, there&apos;s a chance Coach David won&apos;t see your
-          request in time. Please text or call him directly to confirm the session.
-        </div>
-
-        <div className="mb-8">
-          <p className="text-sm text-gray-600 max-w-xl">
-            Pick an open slot below and fill in your details. Your request will be held
-            and we&apos;ll text you to confirm within 24 hours.
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-4">
-            <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm">
-              <span className="font-semibold text-gray-800">Mon – Fri</span>
-              <span className="ml-2 text-gray-600">8:00 – 12:00 AM &amp; 5:30 – 7:30 PM</span>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm">
-              <span className="font-semibold text-gray-800">Saturday</span>
-              <span className="ml-2 text-gray-600">5:30 – 7:30 PM</span>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm">
-              <span className="font-semibold text-gray-800">Sunday</span>
-              <span className="ml-2 text-gray-600">8:00 AM – 12:00 PM</span>
-            </div>
-          </div>
-        </div>
-
-        <BookingCalendar isAdmin={isAdmin} />
+        <BookingSection isAdmin={isAdmin} />
       </main>
     </div>
   );
