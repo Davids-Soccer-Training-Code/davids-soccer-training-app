@@ -137,9 +137,9 @@ export const TEST_DEFINITIONS: TestDefinition[] = [
     id: "double_leg_jumps",
     name: "Double-leg Jumps",
     fields: [
-      { key: "jumps_10s", label: "Count at 10 seconds", type: "number" },
-      { key: "jumps_20s", label: "Count at 20 seconds", type: "number" },
-      { key: "jumps_30s", label: "Count at 30 seconds", type: "number" },
+      { key: "jump_1", label: "Attempt 1 distance", type: "number" },
+      { key: "jump_2", label: "Attempt 2 distance", type: "number" },
+      { key: "jump_3", label: "Attempt 3 distance", type: "number" },
     ],
   },
   {

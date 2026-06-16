@@ -254,13 +254,8 @@ const PROGRESS_METRICS_BY_TEST: Record<
     },
   ],
   "Double-leg Jumps": [
-    { key: "double_leg_jumps_total_reps", label: "Total 30s", valueFmt: fmtInt },
-    {
-      key: "double_leg_jumps_dropoff_pct",
-      label: "Dropoff",
-      valueFmt: fmtPct,
-      lowerIsBetter: true,
-    },
+    { key: "double_leg_jumps_best", label: "Best distance", valueFmt: fmtInt },
+    { key: "double_leg_jumps_avg", label: "Avg distance", valueFmt: fmt },
   ],
   "Ankle Dorsiflexion": [
     { key: "ankle_dorsiflex_avg_cm", label: "Avg (cm)", valueFmt: fmt },
@@ -598,35 +593,16 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
   ],
   "Double-leg Jumps": [
     {
-      key: "double_leg_jumps_first10",
-      label: "First 10s",
-      description: "Reps completed in the first 10 seconds.",
+      key: "double_leg_jumps_best",
+      label: "Best distance",
+      description: "Best (longest) double-leg jump across attempts.",
       valueFmt: fmtInt,
     },
     {
-      key: "double_leg_jumps_mid10",
-      label: "Mid 10s",
-      description: "Reps completed from 10s to 20s.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "double_leg_jumps_last10",
-      label: "Last 10s",
-      description: "Reps completed from 20s to 30s.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "double_leg_jumps_total_reps",
-      label: "Total 30s",
-      description: "Total reps completed in 30 seconds.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "double_leg_jumps_dropoff_pct",
-      label: "Dropoff",
-      description:
-        "Estimated fatigue: how much the last 10s dropped vs first 10s (higher = more dropoff).",
-      valueFmt: fmtPct,
+      key: "double_leg_jumps_avg",
+      label: "Avg distance",
+      description: "Average double-leg jump distance across attempts.",
+      valueFmt: fmt,
     },
   ],
   "Ankle Dorsiflexion": [

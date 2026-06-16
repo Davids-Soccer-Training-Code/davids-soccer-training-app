@@ -271,20 +271,9 @@ function computeMetricsForSingleTest(
 
   // DOUBLE-LEG JUMPS
   if (testName === "Double-leg Jumps") {
-    const c10 = num(scores, "jumps_10s");
-    const c20 = num(scores, "jumps_20s");
-    const c30 = num(scores, "jumps_30s");
-    const last10 = c30 === null || c20 === null ? null : c30 - c20;
-    const dropoffPct =
-      c10 === null || last10 === null || c10 === 0
-        ? null
-        : ((c10 - last10) / c10) * 100;
-    metrics.double_leg_jumps_first10 = c10;
-    metrics.double_leg_jumps_total_reps = c30;
-    metrics.double_leg_jumps_last10 = last10;
-    metrics.double_leg_jumps_dropoff_pct = dropoffPct;
-    metrics.double_leg_jumps_mid10 =
-      c20 === null || c10 === null ? null : c20 - c10;
+    const jumpsArr = [1, 2, 3].map((i) => num(scores, `jump_${i}`));
+    metrics.double_leg_jumps_best = maxOfAll(jumpsArr);
+    metrics.double_leg_jumps_avg = avgOfAll(jumpsArr);
   }
 
   // ANKLE DORSIFLEXION
@@ -767,28 +756,14 @@ export function computePlayerProfile(args: {
   const jumps = latest.get("Double-leg Jumps");
   if (jumps) {
     const s = jumps.scores ?? {};
-    const c10 = num(s, "jumps_10s");
-    const c20 = num(s, "jumps_20s");
-    const c30 = num(s, "jumps_30s");
-    const last10 = c30 === null || c20 === null ? null : c30 - c20;
-    const dropoffPct =
-      c10 === null || last10 === null || c10 === 0
-        ? null
-        : ((c10 - last10) / c10) * 100;
-    inputs.jumps = { c10, c20, c30 };
-    setMetric("double_leg_jumps_first10", c10);
-    setMetric("double_leg_jumps_total_reps", c30);
-    setMetric("double_leg_jumps_last10", last10);
-    setMetric("double_leg_jumps_dropoff_pct", dropoffPct);
-    setMetric(
-      "double_leg_jumps_mid10",
-      c20 === null || c10 === null ? null : c20 - c10
-    );
-    setMetric("double_leg_jumps_first20", c20);
-    setMetric(
-      "double_leg_jumps_last20",
-      c30 === null || c10 === null ? null : c30 - c10
-    );
+    const jumpsArr = [1, 2, 3].map((i) => num(s, `jump_${i}`));
+    inputs.jumps = {
+      jump1: jumpsArr[0],
+      jump2: jumpsArr[1],
+      jump3: jumpsArr[2],
+    };
+    setMetric("double_leg_jumps_best", maxOfAll(jumpsArr));
+    setMetric("double_leg_jumps_avg", avgOfAll(jumpsArr));
   }
 
   // ANKLE DORSIFLEXION (stored in inches, convert to cm like your old code)

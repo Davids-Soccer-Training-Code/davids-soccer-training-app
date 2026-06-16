@@ -136,7 +136,7 @@ export const TEST_TO_CATEGORY_MAPPING: Record<
   },
   "Double-leg Jumps": {
     categories: ["speed_agility", "core_strength"],
-    metricKeys: ["double_leg_jumps_total_reps", "double_leg_jumps_dropoff_pct"],
+    metricKeys: ["double_leg_jumps_best", "double_leg_jumps_avg"],
     higherIsBetter: true,
   },
   "Ankle Dorsiflexion": {
@@ -203,8 +203,8 @@ const BENCHMARKS: Record<
   single_leg_hop_asymmetry_pct: { percentile50: 10, percentile75: 5 }, // Lower is better
 
   // Double-leg Jumps
-  double_leg_jumps_total_reps: { percentile50: 50, percentile75: 65 },
-  double_leg_jumps_dropoff_pct: { percentile50: 30, percentile75: 20 }, // Lower is better
+  double_leg_jumps_best: { percentile50: 180, percentile75: 220 },
+  double_leg_jumps_avg: { percentile50: 165, percentile75: 200 },
 
   // Ankle Dorsiflexion
   ankle_dorsiflex_avg_cm: { percentile50: 10, percentile75: 12 },
