@@ -44,16 +44,22 @@ export async function GET(req: NextRequest) {
   const todayStr = today.toISOString().slice(0, 10);
   const endStr = sixWeeks.toISOString().slice(0, 10);
 
-  // Pending/confirmed/blocked booking requests — all block the slot. Each row is
-  // tagged with its coach so the calendar can keep coaches' slots separate.
+  // Only pending requests (held while awaiting a decision) and admin blocks hold
+  // a slot. Confirmed requests are intentionally excluded — once a request is
+  // accepted the session is tracked on Coach David's CRM calendar, and that CRM
+  // session is what blocks the time (see crmDavid below). Each row is tagged with
+  // its coach so the calendar can keep coaches' slots separate.
   const booked = (await sql`
-    SELECT slot_date::text AS date, to_char(slot_start, 'HH24:MI') AS start, coach
+    SELECT slot_date::text AS date,
+           to_char(slot_start, 'HH24:MI') AS start,
+           to_char(slot_end, 'HH24:MI') AS "end",
+           coach
     FROM session_booking_requests
-    WHERE status IN ('pending', 'confirmed', 'blocked')
+    WHERE status IN ('pending', 'blocked')
       AND (${all} OR coach = ${coach})
       AND slot_date >= ${todayStr}::date
       AND slot_date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string; coach: string }>;
+  `) as unknown as Array<{ date: string; start: string; end: string; coach: string }>;
 
   // For admins, also return blocked-by-admin entries with IDs so they can unblock
   const adminBlocked = isAdmin
@@ -75,25 +81,30 @@ export async function GET(req: NextRequest) {
   // CRM sessions: session_date is stored as UTC in a TIMESTAMP WITHOUT TZ column.
   // Cast to TIMESTAMPTZ (so Postgres treats the raw value as UTC), then convert
   // to Arizona time (America/Phoenix = UTC-7, no daylight saving ever).
+  // CRM sessions store only a start; treat each as a standard 1-hour session so
+  // the calendar can block every slot the session overlaps (e.g. a 6:30 session
+  // covers both the 6:00 and 7:00 slots).
   const crmRegular = (await sql`
     SELECT
       ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
-      to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start
+      to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
+      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end"
     FROM crm_sessions
     WHERE cancelled IS NOT TRUE
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string }>;
+  `) as unknown as Array<{ date: string; start: string; end: string }>;
 
   const crmFirst = (await sql`
     SELECT
       ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
-      to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start
+      to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
+      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end"
     FROM crm_first_sessions
     WHERE cancelled IS NOT TRUE
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string }>;
+  `) as unknown as Array<{ date: string; start: string; end: string }>;
 
   // CRM sessions belong to Coach David — tag them so the calendar treats them as his.
   const crmDavid = [...crmRegular, ...crmFirst].map((s) => ({ ...s, coach: "david" }));
@@ -167,13 +178,18 @@ export async function POST(req: NextRequest) {
     return new Response("Invalid slot", { status: 400 });
   }
 
-  // Check if already booked for this coach
+  // Check if this coach already has an overlapping pending request or admin block.
+  // Confirmed requests are excluded to match the calendar — they no longer hold a
+  // slot (the CRM session does). Overlap (rather than an exact start match) catches
+  // off-grid sessions — e.g. an existing 6:30–7:30 hold conflicts with both the
+  // 6:00 and 7:00 slots.
   const conflict = (await sql`
     SELECT 1 FROM session_booking_requests
     WHERE slot_date = ${slot_date}::date
-      AND slot_start = ${slot_start}::time
       AND coach = ${coach}
-      AND status IN ('pending', 'confirmed', 'blocked')
+      AND status IN ('pending', 'blocked')
+      AND slot_start < ${slot_end}::time
+      AND slot_end > ${slot_start}::time
     LIMIT 1
   `) as unknown as Array<unknown>;
 

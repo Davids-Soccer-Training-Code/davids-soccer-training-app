@@ -57,8 +57,18 @@ function fmt(t: string): string {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type BookedSlot = { date: string; start: string; coach: string };
+type BookedSlot = { date: string; start: string; end: string; coach: string };
 type AdminBlocked = { id: string; date: string; start: string; coach: string };
+
+// Times are "HH:MM" (24h). Two ranges overlap when each starts before the other
+// ends. Used so an off-grid session (e.g. 6:30–7:30) blocks every slot it covers.
+const toMin = (t: string) => {
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+};
+function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return toMin(aStart) < toMin(bEnd) && toMin(bStart) < toMin(aEnd);
+}
 type FormState = { date: string; start: string; end: string; dateLabel: string; coach: string };
 
 const COACH_LABEL: Record<string, string> = { david: "Coach David", simon: "Coach Simon" };
@@ -106,9 +116,12 @@ export default function BookingCalendar({
 
   const norm = (s: string) => s.slice(0, 5);
 
-  function isBooked(date: string, start: string, slotCoach: string): boolean {
+  function isBooked(date: string, start: string, end: string, slotCoach: string): boolean {
     return allBooked.some(
-      (b) => b.date === date && norm(b.start) === norm(start) && b.coach === slotCoach
+      (b) =>
+        b.date === date &&
+        b.coach === slotCoach &&
+        rangesOverlap(start, end, b.start, b.end)
     );
   }
 
@@ -132,7 +145,10 @@ export default function BookingCalendar({
         (s) =>
           isAdmin ||
           !allBooked.some(
-            (b) => b.date === day.date && norm(b.start) === norm(s.start) && b.coach === s.coach
+            (b) =>
+              b.date === day.date &&
+              b.coach === s.coach &&
+              rangesOverlap(s.start, s.end, b.start, b.end)
           )
       )
     );
@@ -182,7 +198,7 @@ export default function BookingCalendar({
       });
       if (res.ok) {
         const data = (await res.json()) as { blocked?: AdminBlocked };
-        setLocallyBooked((prev) => [...prev, { date, start, coach: slotCoach }]);
+        setLocallyBooked((prev) => [...prev, { date, start, end, coach: slotCoach }]);
         if (data.blocked) {
           setAdminBlocked((prev) => [...prev, data.blocked!]);
         }
@@ -231,7 +247,7 @@ export default function BookingCalendar({
       });
       if (res.status === 409) { setError("That slot was just taken. Please pick another time."); setSubmitting(false); return; }
       if (!res.ok) { setError((await res.text().catch(() => "")) || "Something went wrong."); setSubmitting(false); return; }
-      setLocallyBooked((prev) => [...prev, { date: form.date, start: form.start, coach: form.coach }]);
+      setLocallyBooked((prev) => [...prev, { date: form.date, start: form.start, end: form.end, coach: form.coach }]);
       setSubmitted(true);
       setParentName(""); setPlayerName(""); setPhone(""); setEmail(""); setNotes("");
     } catch {
@@ -276,7 +292,7 @@ export default function BookingCalendar({
                   </div>
                   <div className="flex flex-wrap gap-2 p-4">
                         {day.slots.map((slot) => {
-                          const booked = isBooked(day.date, slot.start, slot.coach);
+                          const booked = isBooked(day.date, slot.start, slot.end, slot.coach);
                           const blockId = getAdminBlockId(day.date, slot.start, slot.coach);
                           const isSelected =
                             form?.date === day.date && form.start === slot.start && form.coach === slot.coach;

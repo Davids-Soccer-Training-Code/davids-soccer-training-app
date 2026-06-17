@@ -117,11 +117,11 @@ export default function BookingSection({ isAdmin = false }: { isAdmin?: boolean 
               <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm">
                 {isAll && <span className="mr-2 font-semibold text-emerald-700">Coach David</span>}
                 <span className="font-semibold text-gray-800">Mon – Fri</span>
-                <span className="ml-2 text-gray-600">8:00 – 11:00 AM &amp; 5:30 – 7:30 PM</span>
+                <span className="ml-2 text-gray-600">8:00 – 11:00 AM &amp; 5:00 – 8:00 PM</span>
               </div>
               <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm">
                 <span className="font-semibold text-gray-800">Saturday</span>
-                <span className="ml-2 text-gray-600">5:30 – 7:30 PM</span>
+                <span className="ml-2 text-gray-600">5:00 – 8:00 PM</span>
               </div>
               <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm">
                 <span className="font-semibold text-gray-800">Sunday</span>
@@ -152,7 +152,7 @@ export default function BookingSection({ isAdmin = false }: { isAdmin?: boolean 
                 }
               >
                 <span className="font-semibold text-gray-800">Tuesday evening</span>
-                <span className="ml-2 text-gray-600">5:30 – 7:30 PM</span>
+                <span className="ml-2 text-gray-600">5:00 – 8:00 PM</span>
               </div>
             </>
           )}
