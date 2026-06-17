@@ -11,8 +11,9 @@ const MORNING_FULL: SlotDef[] = [
 ];
 
 const EVENING: SlotDef[] = [
-  { start: "17:30", end: "18:30" },
-  { start: "18:30", end: "19:30" },
+  { start: "17:00", end: "18:00" },
+  { start: "18:00", end: "19:00" },
+  { start: "19:00", end: "20:00" },
 ];
 
 // Coach David — Mon–Fri mornings + evenings, Sat evenings, Sun mornings.
