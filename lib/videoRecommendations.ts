@@ -76,54 +76,47 @@ export const TEST_TO_CATEGORY_MAPPING: Record<
     ],
     higherIsBetter: true, // Higher power = better
   },
-  "Serve Distance": {
+  Distance: {
     categories: ["shooting", "passing_first_touch"],
     metricKeys: ["serve_distance_strong_avg", "serve_distance_weak_avg"],
     higherIsBetter: true,
   },
-  "Figure 8 Loops": {
+  Dribbling: {
     categories: ["ball_mastery", "dribbling"],
-    metricKeys: [
-      "figure8_loops_strong",
-      "figure8_loops_weak",
-      "figure8_asymmetry_pct",
-    ],
+    metricKeys: ["figure8_strong", "figure8_weak", "crossdribble_strong"],
     higherIsBetter: true, // More loops = better
   },
-  "Passing Gates": {
+  Passing: {
     categories: ["passing_first_touch", "first_touch"],
-    metricKeys: ["passing_gates_total_hits", "passing_gates_asymmetry_pct"],
-    higherIsBetter: true, // More hits = better
-  },
-  "1v1": {
-    categories: ["dribbling", "defending_shape"],
-    metricKeys: ["one_v_one_avg_score", "one_v_one_consistency_range"],
-    higherIsBetter: true,
+    metricKeys: ["passing_strong", "passing_weak", "passing_color_strong"],
+    higherIsBetter: true, // More passes = better
   },
   Juggling: {
     categories: ["ball_mastery", "first_touch"],
-    metricKeys: ["juggle_best", "juggle_avg_all"],
+    metricKeys: ["juggle_any", "juggle_feet_only"],
     higherIsBetter: true,
   },
   "Skill Moves": {
     categories: ["dribbling", "ball_mastery"],
-    metricKeys: ["skill_moves_avg_rating", "skill_moves_consistency_range"],
+    metricKeys: ["skill_moves_count", "skill_combos_count"],
+    higherIsBetter: true,
+  },
+  "Shooting Accuracy": {
+    categories: ["shooting"],
+    metricKeys: ["shoot_bottom_pen", "shoot_bottom_top18"],
+    higherIsBetter: true,
+  },
+  "First Touch": {
+    categories: ["first_touch", "passing_first_touch"],
+    metricKeys: ["ft_ground_5x5_yards", "ft_aerial_3x3_yards"],
     higherIsBetter: true,
   },
 
-  // Physical/Athletic Skills
+  // Physical/Athletic Skills (not part of the rank system)
   "5-10-5 Agility": {
     categories: ["speed_agility"],
     metricKeys: ["agility_5_10_5_best_time", "agility_5_10_5_avg_time"],
     higherIsBetter: false, // Lower time = better
-  },
-  "Reaction Sprint": {
-    categories: ["speed_agility"],
-    metricKeys: [
-      "reaction_5m_reaction_time_avg",
-      "reaction_5m_total_time_avg",
-    ],
-    higherIsBetter: false,
   },
   "Single-leg Hop": {
     categories: ["speed_agility", "core_strength"],
@@ -137,16 +130,6 @@ export const TEST_TO_CATEGORY_MAPPING: Record<
   "Double-leg Jumps": {
     categories: ["speed_agility", "core_strength"],
     metricKeys: ["double_leg_jumps_best", "double_leg_jumps_avg"],
-    higherIsBetter: true,
-  },
-  "Ankle Dorsiflexion": {
-    categories: ["stretching", "speed_agility"],
-    metricKeys: ["ankle_dorsiflex_avg_cm", "ankle_dorsiflex_asymmetry_pct"],
-    higherIsBetter: true,
-  },
-  "Core Plank": {
-    categories: ["core_strength"],
-    metricKeys: ["core_plank_hold_sec", "core_plank_hold_sec_if_good_form"],
     higherIsBetter: true,
   },
 };
@@ -164,38 +147,39 @@ const BENCHMARKS: Record<
   shot_power_weak_avg: { percentile50: 35, percentile75: 45 },
   shot_power_asymmetry_pct: { percentile50: 20, percentile75: 10 }, // Lower is better
 
-  // Serve Distance
-  serve_distance_strong_avg: { percentile50: 40, percentile75: 50 },
-  serve_distance_weak_avg: { percentile50: 30, percentile75: 40 },
+  // Distance
+  serve_distance_strong_avg: { percentile50: 25, percentile75: 35 },
+  serve_distance_weak_avg: { percentile50: 20, percentile75: 30 },
 
-  // Figure 8 Loops
-  figure8_loops_strong: { percentile50: 15, percentile75: 20 },
-  figure8_loops_weak: { percentile50: 12, percentile75: 17 },
-  figure8_asymmetry_pct: { percentile50: 15, percentile75: 8 }, // Lower is better
+  // Dribbling
+  figure8_strong: { percentile50: 6, percentile75: 8 },
+  figure8_weak: { percentile50: 6, percentile75: 7.5 },
+  crossdribble_strong: { percentile50: 15, percentile75: 20 },
 
-  // Passing Gates
-  passing_gates_total_hits: { percentile50: 20, percentile75: 28 },
-  passing_gates_asymmetry_pct: { percentile50: 20, percentile75: 10 }, // Lower is better
-
-  // 1v1
-  one_v_one_avg_score: { percentile50: 1.5, percentile75: 2.0 },
-  one_v_one_consistency_range: { percentile50: 2.0, percentile75: 1.5 }, // Lower is better
+  // Passing
+  passing_strong: { percentile50: 3, percentile75: 4 },
+  passing_weak: { percentile50: 3, percentile75: 4 },
+  passing_color_strong: { percentile50: 8, percentile75: 10 },
 
   // Juggling
-  juggle_best: { percentile50: 30, percentile75: 50 },
-  juggle_avg_all: { percentile50: 20, percentile75: 35 },
+  juggle_any: { percentile50: 50, percentile75: 100 },
+  juggle_feet_only: { percentile50: 80, percentile75: 120 },
 
   // Skill Moves
-  skill_moves_avg_rating: { percentile50: 3.0, percentile75: 4.0 },
-  skill_moves_consistency_range: { percentile50: 2.0, percentile75: 1.5 }, // Lower is better
+  skill_moves_count: { percentile50: 8, percentile75: 12 },
+  skill_combos_count: { percentile50: 4, percentile75: 8 },
+
+  // Shooting Accuracy
+  shoot_bottom_pen: { percentile50: 5, percentile75: 6 },
+  shoot_bottom_top18: { percentile50: 5, percentile75: 6 },
+
+  // First Touch
+  ft_ground_5x5_yards: { percentile50: 15, percentile75: 20 },
+  ft_aerial_3x3_yards: { percentile50: 10, percentile75: 15 },
 
   // Agility
   agility_5_10_5_best_time: { percentile50: 8.5, percentile75: 7.5 }, // Lower is better
   agility_5_10_5_avg_time: { percentile50: 9.0, percentile75: 8.0 }, // Lower is better
-
-  // Reaction Sprint
-  reaction_5m_reaction_time_avg: { percentile50: 0.5, percentile75: 0.4 }, // Lower is better
-  reaction_5m_total_time_avg: { percentile50: 3.5, percentile75: 3.0 }, // Lower is better
 
   // Single-leg Hop
   single_leg_hop_left: { percentile50: 150, percentile75: 180 },
@@ -205,14 +189,6 @@ const BENCHMARKS: Record<
   // Double-leg Jumps
   double_leg_jumps_best: { percentile50: 180, percentile75: 220 },
   double_leg_jumps_avg: { percentile50: 165, percentile75: 200 },
-
-  // Ankle Dorsiflexion
-  ankle_dorsiflex_avg_cm: { percentile50: 10, percentile75: 12 },
-  ankle_dorsiflex_asymmetry_pct: { percentile50: 15, percentile75: 8 }, // Lower is better
-
-  // Core Plank
-  core_plank_hold_sec: { percentile50: 30, percentile75: 45 },
-  core_plank_hold_sec_if_good_form: { percentile50: 30, percentile75: 45 },
 };
 
 // ============================================================================

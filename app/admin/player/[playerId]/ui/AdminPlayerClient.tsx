@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
 import { calculatePlayerBirthMeta } from "@/lib/playerAge";
 import { ContentSubmissionsSection } from "./ContentSubmissionsSection";
+import { AdminRankMissions } from "./AdminRankMissions";
 
 type Player = {
   id: string;
@@ -391,17 +392,6 @@ export default function AdminPlayerClient(props: {
   );
   const [testDate, setTestDate] = useState<string>("");
   const [testScores, setTestScores] = useState<Record<string, string>>({});
-  const [oneVOneRoundsCount, setOneVOneRoundsCount] = useState<number>(5);
-  const [oneVOneRounds, setOneVOneRounds] = useState<string[]>(
-    Array.from({ length: 5 }, () => ""),
-  );
-  const [skillMovesCount, setSkillMovesCount] = useState<number>(6);
-  const [skillMovesMinCount, setSkillMovesMinCount] = useState<number>(1);
-  const [skillMoves, setSkillMoves] = useState<
-    Array<{ name: string; score: string }>
-  >(
-    Array.from({ length: 6 }, (_, i) => ({ name: `Move ${i + 1}`, score: "" })),
-  );
 
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
 
@@ -711,38 +701,9 @@ export default function AdminPlayerClient(props: {
   const [editTestScores, setEditTestScores] = useState<Record<string, string>>(
     {},
   );
-  const [editOneVOneRoundsCount, setEditOneVOneRoundsCount] =
-    useState<number>(5);
-  const [editOneVOneRounds, setEditOneVOneRounds] = useState<string[]>(
-    Array.from({ length: 5 }, () => ""),
-  );
-  const [editSkillMovesCount, setEditSkillMovesCount] = useState<number>(6);
-  const [editSkillMoves, setEditSkillMoves] = useState<
-    Array<{ name: string; score: string }>
-  >(
-    Array.from({ length: 6 }, (_, i) => ({ name: `Move ${i + 1}`, score: "" })),
-  );
 
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [editProfileName, setEditProfileName] = useState<string>("");
-
-  function clampCount(raw: string, min: number, max: number, fallback: number) {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(min, Math.min(max, Math.floor(n)));
-  }
-
-  function resizeArray<T>(arr: T[], nextLen: number, make: (i: number) => T) {
-    if (nextLen <= 0) return [];
-    if (arr.length === nextLen) return arr;
-    if (arr.length > nextLen) return arr.slice(0, nextLen);
-    return [
-      ...arr,
-      ...Array.from({ length: nextLen - arr.length }, (_, i) =>
-        make(arr.length + i),
-      ),
-    ];
-  }
 
   function beginEditTest(t: PlayerTest) {
     setEditingTestId(t.id);
@@ -750,84 +711,6 @@ export default function AdminPlayerClient(props: {
     setEditTestDate(t.test_date);
 
     const scores = (t.scores ?? {}) as Record<string, unknown>;
-    if (t.test_name === "1v1") {
-      const roundsRaw = (scores as { rounds?: unknown }).rounds;
-      const rounds = Array.isArray(roundsRaw)
-        ? roundsRaw.map((v) => (v === null || v === undefined ? "" : String(v)))
-        : Object.entries(scores)
-            .map(([k, v]) => {
-              const m = /^onevone_round_(\d+)$/.exec(k);
-              if (!m) return null;
-              return [Number(m[1]), v] as const;
-            })
-            .filter((x): x is readonly [number, unknown] => x !== null)
-            .sort((a, b) => a[0] - b[0])
-            .map(([, v]) => (v === null || v === undefined ? "" : String(v)));
-
-      const count = rounds.length ? rounds.length : 5;
-      setEditOneVOneRoundsCount(count);
-      setEditOneVOneRounds(resizeArray(rounds, count, () => ""));
-      setEditTestScores({});
-      setEditSkillMovesCount(6);
-      setEditSkillMoves(
-        Array.from({ length: 6 }, (_, i) => ({
-          name: `Move ${i + 1}`,
-          score: "",
-        })),
-      );
-      return;
-    }
-
-    if (t.test_name === "Skill Moves") {
-      const movesRaw = (scores as { moves?: unknown }).moves;
-      const moves = Array.isArray(movesRaw)
-        ? movesRaw.map((m) => {
-            const obj = (m ?? {}) as Record<string, unknown>;
-            return {
-              name: String(obj.name ?? "").trim(),
-              score:
-                obj.score === null || obj.score === undefined
-                  ? ""
-                  : String(obj.score),
-            };
-          })
-        : Object.entries(scores)
-            .map(([k, v]) => {
-              const m = /^skillmove_(\d+)$/.exec(k);
-              if (!m) return null;
-              const idx = Number(m[1]);
-              const nameKey = `skillmove_name_${idx}`;
-              const rawName = scores[nameKey];
-              return {
-                idx,
-                name:
-                  rawName === null || rawName === undefined
-                    ? `Move ${idx}`
-                    : String(rawName).trim() || `Move ${idx}`,
-                score: v === null || v === undefined ? "" : String(v),
-              };
-            })
-            .filter(
-              (x): x is { idx: number; name: string; score: string } =>
-                x !== null,
-            )
-            .sort((a, b) => a.idx - b.idx)
-            .map(({ name, score }) => ({ name, score }));
-
-      const count = moves.length ? moves.length : 6;
-      setEditSkillMovesCount(count);
-      setEditSkillMoves(
-        resizeArray(moves, count, (i) => ({
-          name: `Move ${i + 1}`,
-          score: "",
-        })),
-      );
-      setEditTestScores({});
-      setEditOneVOneRoundsCount(5);
-      setEditOneVOneRounds(Array.from({ length: 5 }, () => ""));
-      return;
-    }
-
     const asStrings: Record<string, string> = {};
     for (const [k, v] of Object.entries(scores)) {
       if (v === null || v === undefined) continue;
@@ -846,13 +729,6 @@ export default function AdminPlayerClient(props: {
       return;
     }
 
-    const scores =
-      editTestName === "1v1"
-        ? { rounds: editOneVOneRounds }
-        : editTestName === "Skill Moves"
-          ? { moves: editSkillMoves }
-          : editTestScores;
-
     await api<{ test: PlayerTest }>(
       `/api/admin/players/${playerId}/tests/${editingTestId}`,
       {
@@ -861,7 +737,7 @@ export default function AdminPlayerClient(props: {
         body: JSON.stringify({
           test_name: editTestName,
           test_date: editTestDate,
-          scores,
+          scores: editTestScores,
         }),
       },
     );
@@ -2143,6 +2019,13 @@ export default function AdminPlayerClient(props: {
             </section>
 
             <aside className="space-y-6">
+              {playerId ? (
+                <AdminRankMissions
+                  playerId={playerId}
+                  securityCode={securityCode}
+                />
+              ) : null}
+
               <div className="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
                 <div className="text-sm font-semibold text-gray-900">
                   Testing evaluations
@@ -2158,116 +2041,15 @@ export default function AdminPlayerClient(props: {
                     <select
                       value={testName}
                       onChange={(e) => {
-                        const next = e.target.value;
-                        setTestName(next);
+                        setTestName(e.target.value);
                         setTestScores({});
-                        if (next === "1v1") {
-                          setOneVOneRoundsCount(5);
-                          setOneVOneRounds(Array.from({ length: 5 }, () => ""));
-                        }
-                        if (next === "Skill Moves") {
-                          // Collect ALL unique move names and their most recent scores
-                          const allSkillMovesTests = tests
-                            .filter((t) => t.test_name === "Skill Moves")
-                            .sort((a, b) => {
-                              if (a.test_date !== b.test_date) {
-                                return b.test_date.localeCompare(a.test_date);
-                              }
-                              return b.created_at.localeCompare(a.created_at);
-                            });
-
-                          if (allSkillMovesTests.length > 0) {
-                            // Build a map of move name -> most recent score
-                            const moveScoresMap = new Map<string, string>();
-
-                            // Process tests from newest to oldest, so earlier iterations set the most recent scores
-                            for (const test of allSkillMovesTests) {
-                              const scores = test.scores ?? {};
-                              const movesRaw = (scores as { moves?: unknown })
-                                .moves;
-
-                              if (Array.isArray(movesRaw)) {
-                                movesRaw.forEach((m) => {
-                                  const obj = (m ?? {}) as Record<
-                                    string,
-                                    unknown
-                                  >;
-                                  const name = String(obj.name ?? "").trim();
-                                  if (name && !moveScoresMap.has(name)) {
-                                    // First time seeing this move (most recent)
-                                    const score =
-                                      obj.score === null ||
-                                      obj.score === undefined
-                                        ? ""
-                                        : String(obj.score);
-                                    moveScoresMap.set(name, score);
-                                  }
-                                });
-                              } else {
-                                // Legacy format
-                                Object.entries(scores).forEach(([k, v]) => {
-                                  const m = /^skillmove_name_(\d+)$/.exec(k);
-                                  if (m) {
-                                    const name = String(v ?? "").trim();
-                                    if (name && !moveScoresMap.has(name)) {
-                                      const idx = Number(m[1]);
-                                      const scoreKey = `skillmove_${idx}`;
-                                      const score =
-                                        scores[scoreKey] === null ||
-                                        scores[scoreKey] === undefined
-                                          ? ""
-                                          : String(scores[scoreKey]);
-                                      moveScoresMap.set(name, score);
-                                    }
-                                  }
-                                });
-                              }
-                            }
-
-                            // Convert to array
-                            const movesWithScores = Array.from(
-                              moveScoresMap.entries(),
-                            ).map(([name, score]) => ({
-                              name,
-                              score,
-                            }));
-
-                            const minCount = movesWithScores.length; // Can't have fewer than existing moves
-                            const count = Math.max(
-                              6,
-                              movesWithScores.length + 2,
-                            );
-
-                            setSkillMovesMinCount(minCount);
-                            setSkillMovesCount(count);
-                            setSkillMoves([
-                              ...movesWithScores,
-                              ...Array.from(
-                                { length: count - movesWithScores.length },
-                                (_, i) => ({
-                                  name: `Move ${movesWithScores.length + i + 1}`,
-                                  score: "",
-                                }),
-                              ),
-                            ]);
-                          } else {
-                            // No previous test - use default blank moves
-                            setSkillMovesMinCount(1);
-                            setSkillMovesCount(6);
-                            setSkillMoves(
-                              Array.from({ length: 6 }, (_, i) => ({
-                                name: `Move ${i + 1}`,
-                                score: "",
-                              })),
-                            );
-                          }
-                        }
                       }}
                       className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                     >
                       {TEST_DEFINITIONS.map((t) => (
                         <option key={t.id} value={t.name}>
                           {t.name}
+                          {t.isRankTest ? " — rank test" : ""}
                         </option>
                       ))}
                     </select>
@@ -2285,143 +2067,26 @@ export default function AdminPlayerClient(props: {
                       Scores
                     </div>
                     <div className="mt-3 grid gap-3">
-                      {testName === "1v1" ? (
-                        <>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="text-sm text-gray-700">
-                              Number of rounds
-                            </div>
-                            <input
-                              value={String(oneVOneRoundsCount)}
-                              onChange={(e) => {
-                                const next = clampCount(
-                                  e.target.value,
-                                  1,
-                                  50,
-                                  5,
-                                );
-                                setOneVOneRoundsCount(next);
-                                setOneVOneRounds((prev) =>
-                                  resizeArray(prev, next, () => ""),
-                                );
-                              }}
-                              inputMode="numeric"
-                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                            />
-                          </div>
-
-                          {oneVOneRounds.map((v, i) => (
-                            <div key={i} className="grid grid-cols-2 gap-3">
-                              <div className="text-sm text-gray-700">
-                                Round {i + 1} score
-                              </div>
-                              <input
-                                value={v}
-                                onChange={(e) =>
-                                  setOneVOneRounds((prev) =>
-                                    prev.map((x, idx) =>
-                                      idx === i ? e.target.value : x,
-                                    ),
-                                  )
-                                }
-                                inputMode="decimal"
-                                className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                placeholder="—"
-                              />
-                            </div>
-                          ))}
-                        </>
-                      ) : testName === "Skill Moves" ? (
-                        <>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="text-sm text-gray-700">
-                              Number of moves
-                            </div>
-                            <select
-                              value={String(skillMovesCount)}
-                              onChange={(e) => {
-                                const next = Number(e.target.value);
-                                setSkillMovesCount(next);
-                                setSkillMoves((prev) =>
-                                  resizeArray(prev, next, (i) => ({
-                                    name: `Move ${i + 1}`,
-                                    score: "",
-                                  })),
-                                );
-                              }}
-                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                            >
-                              {Array.from(
-                                { length: 51 - skillMovesMinCount },
-                                (_, i) => skillMovesMinCount + i,
-                              ).map((num) => (
-                                <option key={num} value={num}>
-                                  {num}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {skillMoves.map((m, i) => (
-                            <div key={i} className="grid gap-3 sm:grid-cols-3">
-                              <input
-                                value={m.name}
-                                onChange={(e) =>
-                                  setSkillMoves((prev) =>
-                                    prev.map((x, idx) =>
-                                      idx === i
-                                        ? { ...x, name: e.target.value }
-                                        : x,
-                                    ),
-                                  )
-                                }
-                                className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 sm:col-span-2"
-                                placeholder={`Move ${i + 1} name`}
-                              />
-                              <input
-                                value={m.score}
-                                onChange={(e) =>
-                                  setSkillMoves((prev) =>
-                                    prev.map((x, idx) =>
-                                      idx === i
-                                        ? { ...x, score: e.target.value }
-                                        : x,
-                                    ),
-                                  )
-                                }
-                                inputMode="decimal"
-                                className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                placeholder="Score"
-                              />
-                            </div>
-                          ))}
-                        </>
-                      ) : (
-                        (
-                          TEST_DEFINITIONS.find((t) => t.name === testName)
-                            ?.fields ?? []
-                        ).map((f) => (
-                          <div key={f.key} className="grid grid-cols-2 gap-3">
-                            <div className="text-sm text-gray-700">
-                              {f.label}
-                            </div>
-                            <input
-                              value={testScores[f.key] ?? ""}
-                              onChange={(e) =>
-                                setTestScores((prev) => ({
-                                  ...prev,
-                                  [f.key]: e.target.value,
-                                }))
-                              }
-                              inputMode={
-                                f.type === "number" ? "decimal" : "text"
-                              }
-                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                              placeholder="—"
-                            />
-                          </div>
-                        ))
-                      )}
+                      {(
+                        TEST_DEFINITIONS.find((t) => t.name === testName)
+                          ?.fields ?? []
+                      ).map((f) => (
+                        <div key={f.key} className="grid grid-cols-2 gap-3">
+                          <div className="text-sm text-gray-700">{f.label}</div>
+                          <input
+                            value={testScores[f.key] ?? ""}
+                            onChange={(e) =>
+                              setTestScores((prev) => ({
+                                ...prev,
+                                [f.key]: e.target.value,
+                              }))
+                            }
+                            inputMode={f.type === "number" ? "decimal" : "text"}
+                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                            placeholder="—"
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -2439,13 +2104,6 @@ export default function AdminPlayerClient(props: {
 
                       startTransition(async () => {
                         try {
-                          const scores =
-                            testName === "1v1"
-                              ? { rounds: oneVOneRounds }
-                              : testName === "Skill Moves"
-                                ? { moves: skillMoves }
-                                : testScores;
-
                           await api<{ test: PlayerTest }>(
                             `/api/admin/players/${playerId}/tests`,
                             {
@@ -2454,21 +2112,12 @@ export default function AdminPlayerClient(props: {
                               body: JSON.stringify({
                                 test_name: testName,
                                 test_date: testDate,
-                                scores,
+                                scores: testScores,
                               }),
                             },
                           );
 
                           setTestScores({});
-                          setOneVOneRounds(Array.from({ length: 5 }, () => ""));
-                          setOneVOneRoundsCount(5);
-                          setSkillMoves(
-                            Array.from({ length: 6 }, (_, i) => ({
-                              name: `Move ${i + 1}`,
-                              score: "",
-                            })),
-                          );
-                          setSkillMovesCount(6);
                           await loadTests(securityCode, playerId);
                           setMsg("Test saved.");
                         } catch (e) {
@@ -2509,31 +2158,9 @@ export default function AdminPlayerClient(props: {
                             </div>
                           </div>
                           <div className="mt-1 text-xs text-gray-500">
-                            {(() => {
-                              const s = (t.scores ?? {}) as Record<
-                                string,
-                                unknown
-                              >;
-                              if (
-                                t.test_name === "1v1" &&
-                                Array.isArray(
-                                  (s as { rounds?: unknown }).rounds,
-                                )
-                              ) {
-                                return `${
-                                  (s as { rounds: unknown[] }).rounds.length
-                                } rounds`;
-                              }
-                              if (
-                                t.test_name === "Skill Moves" &&
-                                Array.isArray((s as { moves?: unknown }).moves)
-                              ) {
-                                return `${
-                                  (s as { moves: unknown[] }).moves.length
-                                } moves`;
-                              }
-                              return `${Object.keys(s).length} fields`;
-                            })()}
+                            {`${
+                              Object.keys((t.scores ?? {}) as Record<string, unknown>).length
+                            } fields`}
                           </div>
                           <details className="mt-3">
                             <summary className="cursor-pointer text-xs font-semibold text-emerald-700">
@@ -2593,24 +2220,8 @@ export default function AdminPlayerClient(props: {
                                   <select
                                     value={editTestName}
                                     onChange={(e) => {
-                                      const next = e.target.value;
-                                      setEditTestName(next);
+                                      setEditTestName(e.target.value);
                                       setEditTestScores({});
-                                      if (next === "1v1") {
-                                        setEditOneVOneRoundsCount(5);
-                                        setEditOneVOneRounds(
-                                          Array.from({ length: 5 }, () => ""),
-                                        );
-                                      }
-                                      if (next === "Skill Moves") {
-                                        setEditSkillMovesCount(6);
-                                        setEditSkillMoves(
-                                          Array.from({ length: 6 }, (_, i) => ({
-                                            name: `Move ${i + 1}`,
-                                            score: "",
-                                          })),
-                                        );
-                                      }
                                     }}
                                     className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
                                   >
@@ -2634,173 +2245,36 @@ export default function AdminPlayerClient(props: {
                                     Scores
                                   </div>
                                   <div className="mt-3 grid gap-3">
-                                    {editTestName === "1v1" ? (
-                                      <>
-                                        <div className="grid grid-cols-2 gap-3">
-                                          <div className="text-sm text-gray-700">
-                                            Number of rounds
-                                          </div>
-                                          <input
-                                            value={String(
-                                              editOneVOneRoundsCount,
-                                            )}
-                                            onChange={(e) => {
-                                              const next = clampCount(
-                                                e.target.value,
-                                                1,
-                                                50,
-                                                5,
-                                              );
-                                              setEditOneVOneRoundsCount(next);
-                                              setEditOneVOneRounds((prev) =>
-                                                resizeArray(
-                                                  prev,
-                                                  next,
-                                                  () => "",
-                                                ),
-                                              );
-                                            }}
-                                            inputMode="numeric"
-                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                          />
+                                    {(
+                                      TEST_DEFINITIONS.find(
+                                        (td) => td.name === editTestName,
+                                      )?.fields ?? []
+                                    ).map((f) => (
+                                      <div
+                                        key={f.key}
+                                        className="grid grid-cols-2 gap-3"
+                                      >
+                                        <div className="text-sm text-gray-700">
+                                          {f.label}
                                         </div>
-                                        {editOneVOneRounds.map((v, i) => (
-                                          <div
-                                            key={i}
-                                            className="grid grid-cols-2 gap-3"
-                                          >
-                                            <div className="text-sm text-gray-700">
-                                              Round {i + 1} score
-                                            </div>
-                                            <input
-                                              value={v}
-                                              onChange={(e) =>
-                                                setEditOneVOneRounds((prev) =>
-                                                  prev.map((x, idx) =>
-                                                    idx === i
-                                                      ? e.target.value
-                                                      : x,
-                                                  ),
-                                                )
-                                              }
-                                              inputMode="decimal"
-                                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                              placeholder="—"
-                                            />
-                                          </div>
-                                        ))}
-                                      </>
-                                    ) : editTestName === "Skill Moves" ? (
-                                      <>
-                                        <div className="grid grid-cols-2 gap-3">
-                                          <div className="text-sm text-gray-700">
-                                            Number of moves
-                                          </div>
-                                          <select
-                                            value={String(editSkillMovesCount)}
-                                            onChange={(e) => {
-                                              const next = Number(
-                                                e.target.value,
-                                              );
-                                              setEditSkillMovesCount(next);
-                                              setEditSkillMoves((prev) =>
-                                                resizeArray(
-                                                  prev,
-                                                  next,
-                                                  (i) => ({
-                                                    name: `Move ${i + 1}`,
-                                                    score: "",
-                                                  }),
-                                                ),
-                                              );
-                                            }}
-                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                          >
-                                            {Array.from(
-                                              { length: 50 },
-                                              (_, i) => i + 1,
-                                            ).map((num) => (
-                                              <option key={num} value={num}>
-                                                {num}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                        {editSkillMoves.map((m, i) => (
-                                          <div
-                                            key={i}
-                                            className="grid gap-3 sm:grid-cols-3"
-                                          >
-                                            <input
-                                              value={m.name}
-                                              onChange={(e) =>
-                                                setEditSkillMoves((prev) =>
-                                                  prev.map((x, idx) =>
-                                                    idx === i
-                                                      ? {
-                                                          ...x,
-                                                          name: e.target.value,
-                                                        }
-                                                      : x,
-                                                  ),
-                                                )
-                                              }
-                                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 sm:col-span-2"
-                                              placeholder={`Move ${i + 1} name`}
-                                            />
-                                            <input
-                                              value={m.score}
-                                              onChange={(e) =>
-                                                setEditSkillMoves((prev) =>
-                                                  prev.map((x, idx) =>
-                                                    idx === i
-                                                      ? {
-                                                          ...x,
-                                                          score: e.target.value,
-                                                        }
-                                                      : x,
-                                                  ),
-                                                )
-                                              }
-                                              inputMode="decimal"
-                                              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                              placeholder="Score"
-                                            />
-                                          </div>
-                                        ))}
-                                      </>
-                                    ) : (
-                                      (
-                                        TEST_DEFINITIONS.find(
-                                          (td) => td.name === editTestName,
-                                        )?.fields ?? []
-                                      ).map((f) => (
-                                        <div
-                                          key={f.key}
-                                          className="grid grid-cols-2 gap-3"
-                                        >
-                                          <div className="text-sm text-gray-700">
-                                            {f.label}
-                                          </div>
-                                          <input
-                                            value={editTestScores[f.key] ?? ""}
-                                            onChange={(e) =>
-                                              setEditTestScores((prev) => ({
-                                                ...prev,
-                                                [f.key]: e.target.value,
-                                              }))
-                                            }
-                                            inputMode={
-                                              f.type === "number"
-                                                ? "decimal"
-                                                : "text"
-                                            }
-                                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                                            placeholder="—"
-                                          />
-                                        </div>
-                                      ))
-                                    )}
+                                        <input
+                                          value={editTestScores[f.key] ?? ""}
+                                          onChange={(e) =>
+                                            setEditTestScores((prev) => ({
+                                              ...prev,
+                                              [f.key]: e.target.value,
+                                            }))
+                                          }
+                                          inputMode={
+                                            f.type === "number"
+                                              ? "decimal"
+                                              : "text"
+                                          }
+                                          className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-gray-800 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+                                          placeholder="—"
+                                        />
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
 

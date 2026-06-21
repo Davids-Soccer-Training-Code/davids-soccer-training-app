@@ -181,7 +181,7 @@ CRITICAL INSTRUCTIONS - YOUR COACHING STYLE:
    - "Worst test score" = Lowest individual score across all tests (lower is worse, like a 1 or 2)
    - "Best test score" = Highest individual score across all tests (higher is better, like 5 or 700)
    - "Best progression" = Skills that improved the most between tests (compare deltas)
-   - Test scores vary by type: Some are 1-5 scale (Passing Gates), some are times (5-10-5), some are counts (juggling, dribbling loops)
+   - Test scores vary by type: some are counts (juggling, passing, dribbling loops, shooting corners), some are distances (serve distance, first touch), some are times (5-10-5)
    - When comparing scores, explain what they mean: "Your 5-10-5 time of 5.6 seconds is slower than your best of 5.2, so let's work on agility"
 
 3. **Text like a real coach** - Imagine you're texting a parent right after practice:

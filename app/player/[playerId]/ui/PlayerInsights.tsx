@@ -1,6 +1,13 @@
 "use client";
 
 import { TEST_DEFINITIONS } from "@/lib/testDefinitions";
+import {
+  evaluateTest,
+  metricRankIndex,
+  isRankTest,
+  RANK_BY_KEY,
+} from "@/lib/rankSystem";
+import { RankBadge } from "./RankLadder";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Profile = {
@@ -64,61 +71,6 @@ type PlayerTest = {
   updated_at: string;
 };
 
-function asNullableNumber(v: unknown) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function getOneVOneRounds(scores: Record<string, unknown>) {
-  const roundsRaw = (scores as { rounds?: unknown }).rounds;
-  if (Array.isArray(roundsRaw)) {
-    return roundsRaw.map((v) => asNullableNumber(v));
-  }
-  const entries = Object.entries(scores)
-    .map(([k, v]) => {
-      const m = /^onevone_round_(\d+)$/.exec(k);
-      if (!m) return null;
-      return [Number(m[1]), asNullableNumber(v)] as const;
-    })
-    .filter((x): x is readonly [number, number | null] => x !== null)
-    .sort((a, b) => a[0] - b[0]);
-  return entries.map((e) => e[1]);
-}
-
-function getSkillMoves(
-  scores: Record<string, unknown>
-): Array<{ name: string; score: number | null }> {
-  const movesRaw = (scores as { moves?: unknown }).moves;
-  if (Array.isArray(movesRaw)) {
-    return movesRaw.map((m, i) => {
-      const obj = (m ?? {}) as Record<string, unknown>;
-      const name = String(obj.name ?? "").trim() || `Move ${i + 1}`;
-      const score = asNullableNumber(obj.score);
-      return { name, score };
-    });
-  }
-  const entries = Object.entries(scores)
-    .map(([k, v]) => {
-      const m = /^skillmove_(\d+)$/.exec(k);
-      if (!m) return null;
-      const idx = Number(m[1]);
-      const nameKey = `skillmove_name_${idx}`;
-      const rawName = scores[nameKey];
-      const name =
-        rawName === null || rawName === undefined
-          ? `Move ${idx}`
-          : String(rawName).trim() || `Move ${idx}`;
-      const score = asNullableNumber(v);
-      return { idx, name, score };
-    })
-    .filter(
-      (x): x is { idx: number; name: string; score: number | null } =>
-        x !== null
-    )
-    .sort((a, b) => a.idx - b.idx);
-  return entries.map(({ name, score }) => ({ name, score }));
-}
 
 function fmt(n: number | null | undefined, decimals = 2) {
   if (n === null || n === undefined) return "—";
@@ -175,8 +127,8 @@ const PROGRESS_METRICS_BY_TEST: Record<
   }>
 > = {
   Power: [
-    { key: "shot_power_strong_avg", label: "Strong avg", valueFmt: fmt },
-    { key: "shot_power_weak_avg", label: "Weak avg", valueFmt: fmt },
+    { key: "shot_power_strong_max", label: "Strong best", valueFmt: fmtInt },
+    { key: "shot_power_weak_max", label: "Weak best", valueFmt: fmtInt },
     {
       key: "shot_power_asymmetry_pct",
       label: "Asymmetry",
@@ -184,9 +136,9 @@ const PROGRESS_METRICS_BY_TEST: Record<
       lowerIsBetter: true,
     },
   ],
-  "Serve Distance": [
-    { key: "serve_distance_strong_avg", label: "Strong avg", valueFmt: fmt },
-    { key: "serve_distance_weak_avg", label: "Weak avg", valueFmt: fmt },
+  Distance: [
+    { key: "serve_distance_strong_max", label: "Strong best", valueFmt: fmtInt },
+    { key: "serve_distance_weak_max", label: "Weak best", valueFmt: fmtInt },
     {
       key: "serve_distance_asymmetry_pct",
       label: "Asymmetry",
@@ -194,26 +146,36 @@ const PROGRESS_METRICS_BY_TEST: Record<
       lowerIsBetter: true,
     },
   ],
-  "Figure 8 Loops": [
-    { key: "figure8_loops_both", label: "Both feet", valueFmt: fmtInt },
-    { key: "figure8_loops_weak", label: "Weak foot", valueFmt: fmtInt },
-    { key: "figure8_loops_strong", label: "Strong foot", valueFmt: fmtInt },
+  Dribbling: [
+    { key: "figure8_strong", label: "Figure-8 strong", valueFmt: fmt },
+    { key: "crossdribble_strong", label: "Cross-dribble strong", valueFmt: fmt },
+    { key: "obstacle_strong", label: "Obstacle strong", valueFmt: fmt },
   ],
-  "Passing Gates": [
-    { key: "passing_gates_total_hits", label: "Total hits", valueFmt: fmtInt },
-    {
-      key: "passing_gates_asymmetry_pct",
-      label: "Asymmetry",
-      valueFmt: fmtPct,
-      lowerIsBetter: true,
-    },
-  ],
-  "1v1": [
-    { key: "one_v_one_avg_score", label: "Avg score per round", valueFmt: fmt },
+  Passing: [
+    { key: "passing_strong", label: "Gate strong", valueFmt: fmtInt },
+    { key: "passing_weak", label: "Gate weak", valueFmt: fmtInt },
+    { key: "passing_color_strong", label: "Color goal strong", valueFmt: fmtInt },
+    { key: "passing_color_weak", label: "Color goal weak", valueFmt: fmtInt },
+    { key: "passing_color_read_strong", label: "Read-color strong", valueFmt: fmtInt },
+    { key: "passing_color_read_weak", label: "Read-color weak", valueFmt: fmtInt },
+    { key: "passing_gate2yd_strong", label: "2-yd gate strong", valueFmt: fmtInt },
+    { key: "passing_gate2yd_weak", label: "2-yd gate weak", valueFmt: fmtInt },
   ],
   Juggling: [
-    { key: "juggle_best", label: "Best attempt", valueFmt: fmtInt },
-    { key: "juggle_avg_all", label: "Average", valueFmt: fmt },
+    { key: "juggle_any", label: "Juggles (any)", valueFmt: fmtInt },
+    { key: "juggle_feet_only", label: "Feet only", valueFmt: fmtInt },
+  ],
+  "Skill Moves": [
+    { key: "skill_moves_count", label: "Moves", valueFmt: fmtInt },
+    { key: "skill_combos_count", label: "Combos", valueFmt: fmtInt },
+  ],
+  "Shooting Accuracy": [
+    { key: "shoot_bottom_pen", label: "Bottom (penalty)", valueFmt: fmtInt },
+    { key: "shoot_bottom_top18", label: "Bottom (top 18)", valueFmt: fmtInt },
+  ],
+  "First Touch": [
+    { key: "ft_ground_5x5_yards", label: "Ground reach (yds)", valueFmt: fmtInt },
+    { key: "ft_aerial_3x3_yards", label: "Aerial reach (yds)", valueFmt: fmtInt },
   ],
   "5-10-5 Agility": [
     {
@@ -225,20 +187,6 @@ const PROGRESS_METRICS_BY_TEST: Record<
     {
       key: "agility_5_10_5_avg_time",
       label: "Avg time",
-      valueFmt: fmt,
-      lowerIsBetter: true,
-    },
-  ],
-  "Reaction Sprint": [
-    {
-      key: "reaction_5m_total_time_best",
-      label: "Best total time",
-      valueFmt: fmt,
-      lowerIsBetter: true,
-    },
-    {
-      key: "reaction_5m_reaction_time_best",
-      label: "Best reaction",
       valueFmt: fmt,
       lowerIsBetter: true,
     },
@@ -256,23 +204,6 @@ const PROGRESS_METRICS_BY_TEST: Record<
   "Double-leg Jumps": [
     { key: "double_leg_jumps_best", label: "Best distance", valueFmt: fmtInt },
     { key: "double_leg_jumps_avg", label: "Avg distance", valueFmt: fmt },
-  ],
-  "Ankle Dorsiflexion": [
-    { key: "ankle_dorsiflex_avg_cm", label: "Avg (cm)", valueFmt: fmt },
-    {
-      key: "ankle_dorsiflex_asymmetry_pct",
-      label: "Asymmetry",
-      valueFmt: fmtPct,
-      lowerIsBetter: true,
-    },
-  ],
-  "Core Plank": [
-    { key: "core_plank_hold_sec", label: "Hold time", valueFmt: fmtInt },
-    {
-      key: "core_plank_hold_sec_if_good_form",
-      label: "Hold (good form)",
-      valueFmt: fmtInt,
-    },
   ],
 };
 
@@ -310,193 +241,245 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
       valueFmt: fmtInt,
     },
   ],
-  "Serve Distance": [
+  Distance: [
+    {
+      key: "serve_distance_strong_max",
+      label: "Strong best",
+      description: "Best (farthest) strong-foot distance.",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "serve_distance_weak_max",
+      label: "Weak best",
+      description: "Best (farthest) weak-foot distance.",
+      valueFmt: fmtInt,
+    },
     {
       key: "serve_distance_strong_avg",
       label: "Strong avg",
-      description: "Average of the 4 strong-foot serve distances.",
+      description: "Average of the 4 strong-foot distances.",
       valueFmt: fmt,
     },
     {
       key: "serve_distance_weak_avg",
       label: "Weak avg",
-      description: "Average of the 4 weak-foot serve distances.",
+      description: "Average of the 4 weak-foot distances.",
+      valueFmt: fmt,
+    },
+  ],
+  Dribbling: [
+    {
+      key: "figure8_strong",
+      label: "Figure-8 strong",
+      description: "Figure-8 loops, strong foot (Green/Red).",
       valueFmt: fmt,
     },
     {
-      key: "serve_distance_asymmetry_pct",
-      label: "Asymmetry",
-      description:
-        "Percent difference between strong and weak averages (higher = bigger gap).",
-      valueFmt: fmtPct,
-    },
-    {
-      key: "serve_distance_strong_max",
-      label: "Strong max",
-      description: "Best (farthest) strong-foot serve distance.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "serve_distance_weak_max",
-      label: "Weak max",
-      description: "Best (farthest) weak-foot serve distance.",
-      valueFmt: fmtInt,
-    },
-  ],
-  "Figure 8 Loops": [
-    {
-      key: "figure8_loops_both",
-      label: "Both",
-      description: "Total loops using both feet (combined).",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "figure8_loops_weak",
-      label: "Weak",
-      description: "Total loops using the weak foot.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "figure8_loops_strong",
-      label: "Strong",
-      description: "Total loops using the strong foot.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "figure8_asymmetry_pct",
-      label: "Asymmetry",
-      description:
-        "Percent difference between strong and weak loops (higher = bigger gap).",
-      valueFmt: fmtPct,
-    },
-  ],
-  "Passing Gates": [
-    {
-      key: "passing_gates_total_hits",
-      label: "Total hits",
-      description: "Strong hits + weak hits.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "passing_gates_strong_hits",
-      label: "Strong hits",
-      description: "Total strong-foot passing gate hits.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "passing_gates_weak_hits",
-      label: "Weak hits",
-      description: "Total weak-foot passing gate hits.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "passing_gates_weak_share_pct",
-      label: "Weak share",
-      description: "Weak hits divided by total hits.",
-      valueFmt: fmtPct,
-    },
-    {
-      key: "passing_gates_asymmetry_pct",
-      label: "Asymmetry",
-      description:
-        "Percent difference between strong and weak hits (higher = bigger gap).",
-      valueFmt: fmtPct,
-    },
-  ],
-  "1v1": [
-    {
-      key: "one_v_one_avg_score",
-      label: "Avg score",
-      description: "Average score across all rounds.",
+      key: "figure8_weak",
+      label: "Figure-8 weak",
+      description: "Figure-8 loops, weak foot.",
       valueFmt: fmt,
     },
     {
-      key: "one_v_one_total_score",
-      label: "Total score",
-      description: "Sum of all round scores.",
+      key: "figure8_both",
+      label: "Figure-8 both",
+      description: "Figure-8 loops, both feet.",
+      valueFmt: fmt,
+    },
+    {
+      key: "crossdribble_strong",
+      label: "Cross strong",
+      description: "Cross-dribble loops, strong foot (Blue/Platinum).",
+      valueFmt: fmt,
+    },
+    {
+      key: "crossdribble_weak",
+      label: "Cross weak",
+      description: "Cross-dribble loops, weak foot.",
+      valueFmt: fmt,
+    },
+    {
+      key: "crossdribble_both",
+      label: "Cross both",
+      description: "Cross-dribble loops, both feet.",
+      valueFmt: fmt,
+    },
+    {
+      key: "obstacle_strong",
+      label: "Obstacle strong",
+      description: "Obstacle shuttle score, strong foot (Diamond/Master).",
+      valueFmt: fmt,
+    },
+    {
+      key: "obstacle_weak",
+      label: "Obstacle weak",
+      description: "Obstacle shuttle score, weak foot.",
+      valueFmt: fmt,
+    },
+    {
+      key: "obstacle_both",
+      label: "Obstacle both",
+      description: "Obstacle shuttle score, both feet.",
+      valueFmt: fmt,
+    },
+  ],
+  Passing: [
+    {
+      key: "passing_strong",
+      label: "Gate strong",
+      description: "Gate passes, strong foot (Green/Red/Blue).",
       valueFmt: fmtInt,
     },
     {
-      key: "one_v_one_best_round",
-      label: "Best round",
-      description: "Highest single round score.",
+      key: "passing_weak",
+      label: "Gate weak",
+      description: "Gate passes, weak foot.",
       valueFmt: fmtInt,
     },
     {
-      key: "one_v_one_worst_round",
-      label: "Worst round",
-      description: "Lowest single round score.",
+      key: "passing_color_strong",
+      label: "Color strong",
+      description: "Color mini-goal passes, strong foot (Platinum).",
       valueFmt: fmtInt,
     },
     {
-      key: "one_v_one_consistency_range",
-      label: "Range",
-      description: "Best round minus worst round (lower = more consistent).",
+      key: "passing_color_weak",
+      label: "Color weak",
+      description: "Color mini-goal passes, weak foot.",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "passing_gate2yd_strong",
+      label: "2-yd strong",
+      description: "2-yard gate passes, strong foot (Master).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "passing_gate2yd_weak",
+      label: "2-yd weak",
+      description: "2-yard gate passes, weak foot.",
       valueFmt: fmtInt,
     },
   ],
   Juggling: [
     {
-      key: "juggle_best",
-      label: "Best",
-      description: "Best single juggling attempt.",
+      key: "juggle_any",
+      label: "Any surface",
+      description: "Best juggles, any surface (Green).",
       valueFmt: fmtInt,
     },
     {
-      key: "juggle_best2_sum",
-      label: "Best 2 sum",
-      description: "Sum of the best two attempts.",
+      key: "juggle_feet_only",
+      label: "Feet only",
+      description: "Best juggles, feet only (Red).",
       valueFmt: fmtInt,
     },
     {
-      key: "juggle_avg_all",
-      label: "Avg",
-      description: "Average across all attempts.",
-      valueFmt: fmt,
-    },
-    {
-      key: "juggle_total",
-      label: "Total",
-      description: "Sum across all attempts.",
+      key: "juggle_bodypart",
+      label: "Body-part",
+      description: "Body-part challenge parts completed (Blue).",
       valueFmt: fmtInt,
     },
     {
-      key: "juggle_consistency_range",
-      label: "Range",
-      description:
-        "Best attempt minus worst attempt (lower = more consistent).",
+      key: "juggle_speed_3min",
+      label: "Speed (3 min)",
+      description: "Speed touches in 3 minutes (Platinum).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "juggle_14in14_reps",
+      label: "14-in-14 reps",
+      description: "14-in-14 completions in a row (Diamond/Master).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "juggle_weakfoot_ladder",
+      label: "Weak-foot ladder",
+      description: "Weak-foot ladder touches up & down (Master).",
       valueFmt: fmtInt,
     },
   ],
   "Skill Moves": [
     {
-      key: "skill_moves_avg_rating",
-      label: "Avg rating",
-      description: "Average rating across all skill moves.",
-      valueFmt: fmt,
-    },
-    {
-      key: "skill_moves_total_rating",
-      label: "Total",
-      description: "Sum of all skill move ratings.",
+      key: "skill_moves_count",
+      label: "Moves",
+      description: "Different moves executed.",
       valueFmt: fmtInt,
     },
     {
-      key: "skill_moves_best_rating",
-      label: "Best",
-      description: "Best (highest) single skill move rating.",
+      key: "skill_combos_count",
+      label: "Combos",
+      description: "Combos executed (Platinum+).",
       valueFmt: fmtInt,
     },
     {
-      key: "skill_moves_worst_rating",
-      label: "Worst",
-      description: "Worst (lowest) single skill move rating.",
+      key: "skill_live_app_pct",
+      label: "Live app %",
+      description: "Live application success rate (need 75%+).",
+      valueFmt: fmtPct,
+    },
+  ],
+  "Shooting Accuracy": [
+    {
+      key: "shoot_bottom_pen",
+      label: "Bottom (pen)",
+      description: "Bottom corners hit from penalty/inside box (Green).",
       valueFmt: fmtInt,
     },
     {
-      key: "skill_moves_consistency_range",
-      label: "Range",
-      description: "Best rating minus worst rating (lower = more consistent).",
+      key: "shoot_bottom_top18",
+      label: "Bottom (top 18)",
+      description: "Bottom corners hit from top of the 18 (Red).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "shoot_bottom_moving",
+      label: "Bottom (moving)",
+      description: "Bottom corners hit, moving ball (Blue).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "shoot_4corners_pen",
+      label: "4 corners (pen)",
+      description: "Distinct corners hit from penalty spot (Platinum).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "shoot_4corners_top18",
+      label: "4 corners (top 18)",
+      description: "Distinct corners hit from top of the 18 (Diamond).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "shoot_4corners_moving",
+      label: "4 corners (moving)",
+      description: "Corners hit twice, moving ball (Master).",
+      valueFmt: fmtInt,
+    },
+  ],
+  "First Touch": [
+    {
+      key: "ft_ground_5x5_yards",
+      label: "Ground 5x5",
+      description: "Max distance reached, ground 5x5 (Green/Red).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "ft_ground_3x3_1touch_yards",
+      label: "Ground 3x3 (1 touch)",
+      description: "Max distance reached, ground 3x3 1-touch (Blue).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "ft_aerial_3x3_yards",
+      label: "Aerial 3x3",
+      description: "Max distance reached, aerial 3x3 (Platinum/Diamond).",
+      valueFmt: fmtInt,
+    },
+    {
+      key: "ft_aerial_3x3_1touch_yards",
+      label: "Aerial 3x3 (1 touch)",
+      description: "Max distance reached, aerial 3x3 1-touch (Master).",
       valueFmt: fmtInt,
     },
   ],
@@ -605,71 +588,27 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
       valueFmt: fmt,
     },
   ],
-  "Ankle Dorsiflexion": [
-    {
-      key: "ankle_dorsiflex_left_cm",
-      label: "Left (cm)",
-      description: "Left ankle dorsiflexion converted to centimeters.",
-      valueFmt: fmt,
-    },
-    {
-      key: "ankle_dorsiflex_right_cm",
-      label: "Right (cm)",
-      description: "Right ankle dorsiflexion converted to centimeters.",
-      valueFmt: fmt,
-    },
-    {
-      key: "ankle_dorsiflex_avg_cm",
-      label: "Avg (cm)",
-      description: "Average of left and right dorsiflexion (cm).",
-      valueFmt: fmt,
-    },
-    {
-      key: "ankle_dorsiflex_asymmetry_pct",
-      label: "Asymmetry",
-      description:
-        "Percent difference between left and right dorsiflexion (higher = bigger gap).",
-      valueFmt: fmtPct,
-    },
-  ],
-  "Core Plank": [
-    {
-      key: "core_plank_hold_sec",
-      label: "Hold (sec)",
-      description: "Total hold time in seconds.",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "core_plank_form_flag",
-      label: "Form flag",
-      description: "1 = good form, 0 = poor form (coach flag).",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "core_plank_hold_sec_if_good_form",
-      label: "Hold if good form",
-      description:
-        "Hold time if form was good; otherwise 0 (penalizes poor form).",
-      valueFmt: fmtInt,
-    },
-  ],
 };
 
 const TEST_DESCRIPTIONS: Record<string, string> = {
   Power:
-    "Measures shot speed in MPH. Players shoot with both strong and weak foot to see power on each side.",
-  "Serve Distance":
-    "Measures how far a ball travels through the air on both feet. Tests pure kicking distance.",
-  "Figure 8 Loops":
-    "Dribbling technique through cones in a figure-8 with strong, weak, and both feet for 1 minute. Scored in loops — 100 = 1 full lap, 150 = 1½ laps, etc.",
-  "Passing Gates":
-    "How many passes a player can make through a gate in 60 seconds at up to 10 yards. Tests accuracy and consistency.",
+    "Measures shot speed. Players shoot with both strong and weak foot — the best of each foot drives the rank.",
+  Distance:
+    "How far a ball travels in the air on each foot. The best strong-foot and weak-foot distance drives the rank.",
+  Dribbling:
+    "Figure-8 loops (Green/Red), then cross-dribble loops (Blue/Platinum), then scored obstacle-shuttle sets (Diamond/Master) — strong, weak, and both feet.",
+  Passing:
+    "Gate passes for the lower ranks, then color mini-goal and 2-yard-gate passing drills for the advanced ranks.",
   "Skill Moves":
-    "Coach-rated mastery of individual skill moves on a 1–5 scale. 1 = just learning, 5 = fully mastered.",
+    "Different moves and combos executed, plus the live-application success rate (coach calls a move on command).",
+  "Shooting Accuracy":
+    "Hitting target corners under harder conditions each rank — bottom corners, then all four corners, from farther out and off a moving ball.",
+  "First Touch":
+    "A 5-minute ladder test: control and reach a target distance with a tightening box, aerial balls, and tighter touch limits each rank.",
   "5-10-5 Agility":
     "Timed change-of-direction drill in seconds. Tests how quickly a player can turn and accelerate in different directions.",
   Juggling:
-    "4 attempts, scored as level + touches (e.g. 105 = level 1 with 5 juggles, 204 = level 2 with 4 juggles). Best two attempts are summed.",
+    "Different juggling challenges per rank — 50 juggles, 100 feet-only, the 14 body-part challenge, 300 speed touches, 14-in-14, and the weak-foot ladder.",
   "Single-leg Hop":
     "Explosive single-leg hop for distance. Score is in feet and inches — 5.2 means 5 feet 2 inches.",
 };
@@ -699,6 +638,7 @@ function ProgressMetricRow({
   pctChange,
   lowerIsBetter = false,
   sparklineValues,
+  dotColors,
 }: {
   label: string;
   firstValue: string;
@@ -707,6 +647,7 @@ function ProgressMetricRow({
   pctChange: number | null;
   lowerIsBetter?: boolean;
   sparklineValues?: Array<number | null>;
+  dotColors?: Array<string | null>;
 }) {
   const hasChange = delta !== null && Math.abs(delta) > 0.001;
   const isImproved = hasChange
@@ -746,7 +687,11 @@ function ProgressMetricRow({
         </div>
       </div>
       {sparklineValues && sparklineValues.length > 1 && (
-        <Sparkline values={sparklineValues} lowerIsBetter={lowerIsBetter} />
+        <Sparkline
+          values={sparklineValues}
+          lowerIsBetter={lowerIsBetter}
+          dotColors={dotColors}
+        />
       )}
     </div>
   );
@@ -756,6 +701,7 @@ function ProgressSection({
   testName,
   progression,
   metricsToShow,
+  scoresByTestId,
 }: {
   testName: string;
   progression: NonNullable<Profile["data"]["test_progressions"]>[string];
@@ -765,6 +711,7 @@ function ProgressSection({
     valueFmt?: (n: number | null | undefined) => string;
     lowerIsBetter?: boolean;
   }>;
+  scoresByTestId?: Map<string, Record<string, unknown>>;
 }) {
   if (progression.test_count < 2) {
     return (
@@ -784,6 +731,38 @@ function ProgressSection({
       ? "1 day"
       : `${progression.date_range_days} days`;
 
+  // For rank tests, color each sparkline dot by the rank that test was at on
+  // that date (so progress shows black → green → red → blue as they climb).
+  const dotColors = isRankTest(testName)
+    ? progression.timeline.map((entry) => {
+        const scores = scoresByTestId?.get(entry.test_id) ?? {};
+        const r = evaluateTest(testName, scores);
+        return RANK_BY_KEY[r.rank].color;
+      })
+    : undefined;
+
+  // Only chart metrics that actually have 2+ recorded points; first/latest are
+  // taken from the recorded points (so a drill that starts at a later rank
+  // doesn't show a misleading "First: —" or an empty left half).
+  const rows = metricsToShow
+    .map((metric) => {
+      const timelineValues = progression.timeline.map(
+        (t) => t.metrics[metric.key]
+      );
+      const nonNull = timelineValues.filter(
+        (v): v is number => typeof v === "number"
+      );
+      if (nonNull.length < 2) return null;
+      const firstVal = nonNull[0];
+      const latestVal = nonNull[nonNull.length - 1];
+      const delta = latestVal - firstVal;
+      const pct = firstVal !== 0 ? (delta / firstVal) * 100 : null;
+      return { metric, timelineValues, firstVal, latestVal, delta, pct };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  if (rows.length === 0) return null;
+
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -796,19 +775,8 @@ function ProgressSection({
       </div>
 
       <div className="space-y-4">
-        {metricsToShow.map((metric) => {
-          const firstVal = progression.first_test.metrics[metric.key];
-          const latestVal = progression.most_recent_test.metrics[metric.key];
-          const delta = progression.changes.since_first[metric.key];
-          const pct = progression.changes.pct_since_first[metric.key];
-
-          if (firstVal === null && latestVal === null) return null;
-
+        {rows.map(({ metric, timelineValues, firstVal, latestVal, delta, pct }) => {
           const formatter = metric.valueFmt ?? fmt;
-          const timelineValues = progression.timeline.map(
-            (t) => t.metrics[metric.key]
-          );
-
           return (
             <ProgressMetricRow
               key={metric.key}
@@ -819,6 +787,7 @@ function ProgressSection({
               pctChange={pct}
               lowerIsBetter={metric.lowerIsBetter ?? false}
               sparklineValues={timelineValues}
+              dotColors={dotColors}
             />
           );
         })}
@@ -831,37 +800,40 @@ function Sparkline({
   values,
   lowerIsBetter = false,
   dates,
+  dotColors,
 }: {
   values: Array<number | null>;
   lowerIsBetter?: boolean;
   dates?: Array<string>;
+  dotColors?: Array<string | null>;
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const nums = values.filter((v): v is number => typeof v === "number");
-  if (nums.length < 2) {
-    return (
-      <div className="h-10 w-full rounded-xl border border-emerald-200 bg-emerald-50" />
-    );
-  }
+  // Only the recorded points, kept with their original timeline index (for
+  // dates + rank dot colors), then laid out edge-to-edge so the line fills the
+  // chart instead of bunching where data happens to exist.
+  const present = values
+    .map((v, i) => ({ v, i }))
+    .filter((p): p is { v: number; i: number } => typeof p.v === "number");
+  if (present.length < 2) return null;
 
+  const nums = present.map((p) => p.v);
   const min = Math.min(...nums);
   const max = Math.max(...nums);
   const w = 220;
   const h = 40;
   const pad = 4;
 
-  const points = values
-    .map((v, i) => {
-      if (typeof v !== "number") return null;
-      const x = (i / (values.length - 1)) * (w - pad * 2) + pad;
-      const t = max === min ? 0.5 : (v - min) / (max - min);
-      // Flip y-axis for "lower is better" metrics so graph goes down when improving
-      const y = lowerIsBetter
-        ? t * (h - pad * 2) + pad
-        : (1 - t) * (h - pad * 2) + pad;
-      return [x, y, v, i] as const;
-    })
-    .filter(Boolean) as Array<readonly [number, number, number, number]>;
+  const points = present.map((p, pos) => {
+    const x =
+      (present.length === 1 ? 0.5 : pos / (present.length - 1)) * (w - pad * 2) +
+      pad;
+    const t = max === min ? 0.5 : (p.v - min) / (max - min);
+    // Flip y-axis for "lower is better" metrics so graph goes down when improving
+    const y = lowerIsBetter
+      ? t * (h - pad * 2) + pad
+      : (1 - t) * (h - pad * 2) + pad;
+    return [x, y, p.v, p.i] as const;
+  });
 
   const d = points
     .map(
@@ -887,11 +859,11 @@ function Sparkline({
       </svg>
 
       {/* Absolutely positioned dots that don't scale */}
-      {points.map(([x, y, value, index], i) => {
+      {points.map(([x, y, , index], i) => {
         const xPercent = (x / w) * 100;
         const yPercent = (y / h) * 100;
         const isLast = i === points.length - 1;
-        const isHovered = hoveredIndex === index;
+        const isHovered = hoveredIndex === i;
 
         return (
           <div
@@ -902,19 +874,17 @@ function Sparkline({
               top: `${yPercent}%`,
               transform: 'translate(-50%, -50%)',
             }}
-            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseEnter={() => setHoveredIndex(i)}
           >
             <div
               className="rounded-full"
               style={{
                 width: isHovered ? '14px' : '10px',
                 height: isHovered ? '14px' : '10px',
-                backgroundColor: isLast
-                  ? improved
-                    ? '#059669'
-                    : '#111827'
-                  : '#059669',
-                opacity: isHovered ? 1 : isLast ? 1 : 0.6,
+                backgroundColor:
+                  dotColors?.[index] ??
+                  (isLast ? (improved ? '#059669' : '#111827') : '#059669'),
+                opacity: isHovered ? 1 : isLast ? 1 : 0.85,
               }}
             />
           </div>
@@ -924,7 +894,7 @@ function Sparkline({
         <div
           className="pointer-events-none absolute z-10 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs font-medium text-gray-900 shadow-lg"
           style={{
-            left: `${(hoveredPoint[3] / (values.length - 1)) * 100}%`,
+            left: `${(hoveredPoint[0] / w) * 100}%`,
             top: "-2.5rem",
             transform: "translateX(-50%)",
           }}
@@ -1066,6 +1036,14 @@ export function PlayerInsights({
     return map;
   }, [rawTests, tests]);
 
+  // id -> scores, for coloring each progress dot by its rank-at-that-date.
+  const scoresByTestId = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>();
+    for (const t of rawTests) map.set(t.id, t.scores ?? {});
+    for (const t of tests) map.set(t.id, t.scores ?? {});
+    return map;
+  }, [rawTests, tests]);
+
   const availableTestNames = useMemo(
     () =>
       TEST_DEFINITIONS.filter((d) => latestByTestName.has(d.name)).map(
@@ -1166,39 +1144,23 @@ export function PlayerInsights({
               const t = latestByTestName.get(def.name);
               if (!t) return null;
 
-              const oneVOneRounds =
-                def.name === "1v1" ? getOneVOneRounds(t.scores ?? {}) : null;
-              const oneVOneRoundsList = oneVOneRounds ?? [];
-              const oneVOneRoundsCount = oneVOneRoundsList.length;
+              // For rank tests, only show fields/metrics relevant up to the
+              // rank the player is working toward (current rank + 1 tier).
+              const rankTest = def.isRankTest === true;
+              const testRank = rankTest
+                ? evaluateTest(def.name, t.scores ?? {})
+                : null;
+              const showThreshold = testRank ? testRank.rankIndex + 1 : 99;
+              const relevant = (key: string) =>
+                !rankTest || metricRankIndex(def.name, key) <= showThreshold;
 
-              // For Skill Moves, collect ALL moves from ALL tests (not just latest)
-              const skillMoves =
-                def.name === "Skill Moves"
-                  ? (() => {
-                      const allMovesMap = new Map<string, number | null>();
-
-                      // Get all Skill Moves tests, sorted by date (most recent last)
-                      const allSkillMovesTests = rawTests
-                        .filter((test) => test.test_name === "Skill Moves")
-                        .sort((a, b) => a.test_date.localeCompare(b.test_date));
-
-                      // Collect all moves, with most recent scores taking precedence
-                      for (const test of allSkillMovesTests) {
-                        const moves = getSkillMoves(test.scores ?? {});
-                        moves.forEach((m) => {
-                          allMovesMap.set(m.name, m.score);
-                        });
-                      }
-
-                      // Convert to array
-                      return Array.from(allMovesMap.entries()).map(([name, score]) => ({
-                        name,
-                        score,
-                      }));
-                    })()
-                  : null;
-              const skillMovesList = skillMoves ?? [];
-              const skillMovesCount = skillMovesList.length;
+              const visibleFields = def.fields.filter((f) => relevant(f.key));
+              const visibleProgress = (
+                PROGRESS_METRICS_BY_TEST[def.name] ?? []
+              ).filter((m) => relevant(m.key));
+              const visibleDerived = (
+                DERIVED_METRICS_BY_TEST[def.name] ?? []
+              ).filter((m) => relevant(m.key));
 
               return (
                 <div
@@ -1220,182 +1182,107 @@ export function PlayerInsights({
                         </p>
                       )}
                     </div>
-                    <div className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      Latest
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {def.name === "1v1" ? (
-                      <>
-                        <div className="sm:col-span-2 text-xs font-semibold text-gray-700">
-                          Scores (each round is 0–3)
-                        </div>
-                        {(oneVOneRoundsCount ? oneVOneRoundsList : []).map(
-                          (v, i) => (
-                            <div
-                              key={`onevone-${i}`}
-                              className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-2"
-                            >
-                              <div className="text-sm text-gray-700">
-                                Round {i + 1}
-                              </div>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {v === null ? "—" : String(v)}
-                              </div>
-                            </div>
-                          )
-                        )}
-                        {oneVOneRoundsCount === 0 ? (
-                          <div className="text-sm text-gray-600">
-                            No rounds recorded.
-                          </div>
-                        ) : null}
-                      </>
-                    ) : def.name === "Skill Moves" ? (
-                      <>
-                        <div className="sm:col-span-2 text-xs font-semibold text-gray-700">
-                          Moves (each move is 1–5)
-                        </div>
-                        {(skillMovesCount ? skillMovesList : []).map((m, i) => (
-                          <div
-                            key={`move-${i}`}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-2"
-                          >
-                            <div className="text-sm text-gray-700">
-                              {m.name}
-                            </div>
-                            <div className="text-sm font-semibold text-gray-900">
-                              {m.score === null ? "—" : String(m.score)}
-                            </div>
-                          </div>
-                        ))}
-                        {skillMovesCount === 0 ? (
-                          <div className="text-sm text-gray-600">
-                            No moves recorded.
-                          </div>
-                        ) : null}
-                      </>
+                    {testRank ? (
+                      <RankBadge
+                        name={RANK_BY_KEY[testRank.rank].shortName}
+                        color={RANK_BY_KEY[testRank.rank].color}
+                        size="sm"
+                      />
                     ) : (
-                      def.fields.map((f) => {
-                        const raw = t.scores?.[f.key];
-                        const value =
-                          raw === null || raw === undefined || raw === ""
-                            ? "—"
-                            : String(raw);
-
-                        // Check if there's a delta for this raw field
-                        const rawDelta = nonZeroDelta(latestDeltas[f.key]);
-                        const delta = rawDelta !== null ? fmtSigned(rawDelta, 2) : null;
-
-                        return (
-                          <div
-                            key={f.key}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-2"
-                          >
-                            <div className="text-sm text-gray-700">
-                              {f.label}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-semibold text-gray-900">
-                                {value}
-                              </div>
-                              {delta ? (
-                                <div className="text-xs font-semibold text-gray-500">
-                                  ({delta})
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })
+                      <div className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Latest
+                      </div>
                     )}
                   </div>
 
-                  {testProgressions[def.name] &&
-                  PROGRESS_METRICS_BY_TEST[def.name] ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {visibleFields.map((f) => {
+                      const raw = t.scores?.[f.key];
+                      const value =
+                        raw === null || raw === undefined || raw === ""
+                          ? "—"
+                          : String(raw);
+
+                      // Text fields (e.g. skill move names) render full-width as
+                      // a label-on-top block so long lists read cleanly.
+                      if (f.type === "text") {
+                        const names = value
+                          .split(",")
+                          .map((n) => n.trim())
+                          .filter(Boolean);
+                        return (
+                          <div
+                            key={f.key}
+                            className="rounded-xl border border-emerald-200 bg-white px-3 py-2 sm:col-span-2"
+                          >
+                            <div className="text-sm text-gray-700">{f.label}</div>
+                            {names.length ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {names.map((n, i) => (
+                                  <span
+                                    key={i}
+                                    className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700"
+                                  >
+                                    {n}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-1 text-sm font-semibold text-gray-900">
+                                —
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // Check if there's a delta for this raw field
+                      const rawDelta = nonZeroDelta(latestDeltas[f.key]);
+                      const delta =
+                        rawDelta !== null ? fmtSigned(rawDelta, 2) : null;
+
+                      return (
+                        <div
+                          key={f.key}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-2"
+                        >
+                          <div className="text-sm text-gray-700">{f.label}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {value}
+                            </div>
+                            {delta ? (
+                              <div className="text-xs font-semibold text-gray-500">
+                                ({delta})
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {testProgressions[def.name] && visibleProgress.length ? (
                     <div className="mt-4 border-t border-emerald-200 pt-4">
                       <ProgressSection
                         testName={def.name}
                         progression={testProgressions[def.name]}
-                        metricsToShow={PROGRESS_METRICS_BY_TEST[def.name]}
+                        metricsToShow={visibleProgress}
+                        scoresByTestId={scoresByTestId}
                       />
                     </div>
                   ) : null}
 
-                  {DERIVED_METRICS_BY_TEST[def.name]?.length ? (
+                  {visibleDerived.length ? (
                     <div className="mt-4 border-t border-emerald-200 pt-4">
                       <div className="text-xs font-semibold text-gray-900">
                         Derived metrics
                       </div>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {DERIVED_METRICS_BY_TEST[def.name].map((m) => {
-                          let rawValue = latestMetrics[m.key];
+                        {visibleDerived.map((m) => {
+                          const rawValue = latestMetrics[m.key];
                           const rawDelta = nonZeroDelta(latestDeltas[m.key]);
-
-                          // For Skill Moves, compute metrics from ALL displayed moves
-                          if (def.name === "Skill Moves" && skillMovesList.length > 0) {
-                            const scores = skillMovesList
-                              .map((move) => move.score)
-                              .filter((s): s is number => s !== null);
-
-                            if (m.key === "skill_moves_avg_rating") {
-                              rawValue = scores.length > 0
-                                ? scores.reduce((a, b) => a + b, 0) / scores.length
-                                : null;
-                            } else if (m.key === "skill_moves_total_rating") {
-                              rawValue = scores.length > 0
-                                ? scores.reduce((a, b) => a + b, 0)
-                                : null;
-                            } else if (m.key === "skill_moves_best_rating") {
-                              rawValue = scores.length > 0 ? Math.max(...scores) : null;
-                            } else if (m.key === "skill_moves_worst_rating") {
-                              rawValue = scores.length > 0 ? Math.min(...scores) : null;
-                            } else if (m.key === "skill_moves_consistency_range") {
-                              rawValue = scores.length > 0
-                                ? Math.max(...scores) - Math.min(...scores)
-                                : null;
-                            }
-                          }
-
-                          let value = (m.valueFmt ?? fmt)(rawValue);
-
-                          // Add score scales for clarity on parent dashboard.
-                          if (def.name === "1v1") {
-                            const maxTotal =
-                              oneVOneRoundsCount > 0
-                                ? oneVOneRoundsCount * 3
-                                : null;
-                            if (
-                              m.key === "one_v_one_avg_score" ||
-                              m.key === "one_v_one_best_round" ||
-                              m.key === "one_v_one_worst_round"
-                            ) {
-                              value = `${value} / 3`;
-                            }
-                            if (m.key === "one_v_one_total_score" && maxTotal) {
-                              value = `${fmtInt(rawValue)} / ${maxTotal}`;
-                            }
-                          }
-
-                          if (def.name === "Skill Moves") {
-                            const maxTotal =
-                              skillMovesCount > 0 ? skillMovesCount * 5 : null;
-                            if (
-                              m.key === "skill_moves_avg_rating" ||
-                              m.key === "skill_moves_best_rating" ||
-                              m.key === "skill_moves_worst_rating"
-                            ) {
-                              value = `${value} / 5`;
-                            }
-                            if (
-                              m.key === "skill_moves_total_rating" &&
-                              maxTotal
-                            ) {
-                              value = `${fmtInt(rawValue)} / ${maxTotal}`;
-                            }
-                          }
-
+                          const value = (m.valueFmt ?? fmt)(rawValue);
                           const delta = fmtSigned(rawDelta, 2);
                           return (
                             <div

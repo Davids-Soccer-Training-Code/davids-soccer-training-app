@@ -19,7 +19,10 @@ import {
 
 import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
+import { getPlayerRank } from "@/lib/getPlayerRank";
+import { RANK_BY_KEY } from "@/lib/rankSystem";
 import { DashboardGoalSteps } from "./ui/DashboardGoalSteps";
+import { RankLadder, RankBadge } from "./ui/RankLadder";
 
 type PlayerRow = {
   name: string;
@@ -229,6 +232,15 @@ export default async function PlayerDashboardPage(props: {
   ].filter((v) => !v).length;
 
   const base = `/player/${playerId}`;
+
+  const rank = await getPlayerRank(playerId);
+  const overallRankDef = RANK_BY_KEY[rank.overall.rank];
+  const targetRankDef = rank.next_checklist.targetRank
+    ? RANK_BY_KEY[rank.next_checklist.targetRank]
+    : null;
+  const testsAtTarget = rank.next_checklist.items.filter(
+    (i) => i.kind === "test" && i.ok,
+  ).length;
   const firstName = player.name.split(" ")[0];
 
   // Completed steps count for goal header
@@ -295,6 +307,52 @@ export default async function PlayerDashboardPage(props: {
           </div>
         ))}
       </div>
+
+      {/* Rank card */}
+      <Link
+        href={`${base}/rank`}
+        className="group block rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-emerald-200 hover:shadow-md"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50">
+              <Trophy className="h-4 w-4 text-amber-600" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Current Rank
+              </div>
+              <div className="text-base font-bold text-gray-900 leading-tight">
+                {overallRankDef.name}
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <RankBadge
+              name={overallRankDef.shortName}
+              color={overallRankDef.color}
+              size="sm"
+            />
+            <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500" />
+          </div>
+        </div>
+        <div className="mt-4">
+          <RankLadder currentIndex={rank.overall.index} />
+        </div>
+        <div className="mt-3 text-xs text-gray-500">
+          {targetRankDef ? (
+            <>
+              Working toward{" "}
+              <span className="font-semibold text-gray-700">
+                {targetRankDef.name}
+              </span>{" "}
+              · {testsAtTarget}/8 tests ready · tap to see what&apos;s left
+            </>
+          ) : (
+            <>Master Rank reached — the top of the ladder! 🏆</>
+          )}
+        </div>
+      </Link>
 
       {/* Active goal card */}
       {activeGoal ? (

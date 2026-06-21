@@ -4,6 +4,7 @@ import Image from "next/image";
 
 import { authOptions } from "@/lib/auth";
 import { sql } from "@/db";
+import { rankBannerGradient, type RankKey } from "@/lib/rankSystem";
 import Link from "next/link";
 import { calculateAgeFromBirthdate } from "@/lib/playerAge";
 import { ParentPortalHeader } from "@/app/ui/ParentPortalHeader";
@@ -29,6 +30,7 @@ type PlayerRow = {
   focus_areas: string | null;
   long_term_development_notes: string | null;
   in_privates: boolean;
+  owner_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -152,31 +154,47 @@ export default async function PlayersPage() {
     is_admin: false,
   };
 
-  const players = (await sql`
-    SELECT
-      id,
-      name,
-      birthdate::text AS birthdate,
-      birth_year,
-      team_level,
-      primary_position,
-      secondary_position,
-      dominant_foot,
-      shirt_size,
-      location,
-      profile_photo_url,
-      strengths,
-      focus_areas,
-      long_term_development_notes,
-      in_privates,
-      created_at,
-      updated_at
-    FROM players
-    WHERE parent_id = ${parentId}
-    ORDER BY created_at DESC
-  `) as unknown as PlayerRow[];
+  // Admins can see every player from the portal (handy for jumping into any
+  // player); regular parents only see their own.
+  const players = (
+    parent.is_admin
+      ? await sql`
+          SELECT
+            p.id, p.name, p.birthdate::text AS birthdate, p.birth_year,
+            p.team_level, p.primary_position, p.secondary_position,
+            p.dominant_foot, p.shirt_size, p.location, p.profile_photo_url,
+            p.strengths, p.focus_areas, p.long_term_development_notes,
+            p.in_privates, owner.name AS owner_name,
+            p.created_at, p.updated_at
+          FROM players p
+          LEFT JOIN parents owner ON owner.id = p.parent_id
+          ORDER BY p.created_at DESC
+        `
+      : await sql`
+          SELECT
+            id, name, birthdate::text AS birthdate, birth_year,
+            team_level, primary_position, secondary_position,
+            dominant_foot, shirt_size, location, profile_photo_url,
+            strengths, focus_areas, long_term_development_notes,
+            in_privates, NULL AS owner_name,
+            created_at, updated_at
+          FROM players
+          WHERE parent_id = ${parentId}
+          ORDER BY created_at DESC
+        `
+  ) as unknown as PlayerRow[];
 
   const hasPrivatePackagePlayer = players.some((p) => p.in_privates);
+
+  // Latest computed overall rank per player (for tinting the card banner).
+  const rankRows = (await sql`
+    SELECT DISTINCT ON (player_id)
+      player_id::text AS player_id,
+      data->'ranks'->'overall'->>'rank' AS rank
+    FROM player_profiles
+    ORDER BY player_id, computed_at DESC, created_at DESC
+  `) as unknown as Array<{ player_id: string; rank: string | null }>;
+  const rankByPlayer = new Map(rankRows.map((r) => [r.player_id, r.rank]));
 
   const groupSessions = (await sql`
     SELECT
@@ -302,6 +320,8 @@ export default async function PlayersPage() {
             {players.map((p) => {
               const age = calculateAgeFromBirthdate(p.birthdate);
               const initials = playerInitials(p.name);
+              const rankKey = (rankByPlayer.get(p.id) ?? null) as RankKey | null;
+              const banner = rankKey ? rankBannerGradient(rankKey) : null;
 
               return (
                 <Link
@@ -309,8 +329,21 @@ export default async function PlayersPage() {
                   href={`/player/${p.id}`}
                   className="group rounded-2xl border border-emerald-200 bg-white shadow-sm transition hover:border-emerald-300 hover:shadow-lg"
                 >
-                  {/* Banner with avatar */}
-                  <div className="relative h-20 rounded-t-2xl bg-linear-to-br from-emerald-500 to-emerald-700">
+                  {/* Banner with avatar — tinted by rank when available */}
+                  <div
+                    className={`relative h-20 rounded-t-2xl ${
+                      banner
+                        ? ""
+                        : "bg-linear-to-br from-emerald-500 to-emerald-700"
+                    }`}
+                    style={
+                      banner
+                        ? {
+                            backgroundImage: `linear-gradient(to bottom right, ${banner.from}, ${banner.to})`,
+                          }
+                        : undefined
+                    }
+                  >
                     <div className="absolute bottom-0 left-5 translate-y-1/2">
                       {p.profile_photo_url ? (
                         <Image
@@ -340,6 +373,11 @@ export default async function PlayersPage() {
                         {p.team_level && (
                           <div className="mt-0.5 text-sm text-gray-500">
                             {p.team_level}
+                          </div>
+                        )}
+                        {parent.is_admin && p.owner_name && (
+                          <div className="mt-0.5 text-xs text-gray-400">
+                            Parent: {p.owner_name}
                           </div>
                         )}
                       </div>

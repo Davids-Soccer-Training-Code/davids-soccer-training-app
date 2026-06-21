@@ -8,6 +8,10 @@ import {
   type PlayerTestRow,
 } from "@/lib/computePlayerProfile";
 import { getPlayerContact, fireAdminSms } from "@/lib/adminSms";
+import {
+  getPlayerSessionCount,
+  getPlayerMissionsLite,
+} from "@/lib/playerRankData";
 
 type PlayerProfileRow = {
   id: string;
@@ -91,9 +95,16 @@ export async function POST(
   const previousProfile = prevRows[0] ?? null;
   const nowIso = new Date().toISOString();
 
+  const [sessionCount, missions] = await Promise.all([
+    getPlayerSessionCount(playerId),
+    getPlayerMissionsLite(playerId),
+  ]);
+
   const data = computePlayerProfile({
     tests,
     nowIso,
+    sessionCount,
+    missions,
     previousProfile,
   });
 

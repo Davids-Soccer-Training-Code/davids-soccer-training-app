@@ -1,6 +1,7 @@
 export type PlayerVideoMode = "recommendations" | "browse" | "continue" | "pinned";
 
 export type PlayerTabType =
+  | "rank"
   | "tests"
   | "goals"
   | "reports"
@@ -28,6 +29,7 @@ const DEFAULT_HASH_STATE: PlayerHashState = {
 };
 
 const TAB_SET = new Set<PlayerTabType>([
+  "rank",
   "tests",
   "goals",
   "reports",

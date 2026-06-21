@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   BarChart2,
+  Trophy,
   Target,
   FileText,
   Upload,
@@ -20,6 +21,7 @@ const ITEMS: {
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   { label: "Dashboard", path: "", icon: LayoutDashboard },
+  { label: "Rank Up", path: "/rank", icon: Trophy },
   { label: "My Progress", path: "/progress", icon: BarChart2 },
   { label: "Goals", path: "/goals", icon: Target },
   { label: "Feedback & Reports", path: "/reports", icon: FileText },

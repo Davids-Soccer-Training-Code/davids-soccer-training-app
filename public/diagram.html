@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flowchart</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      background: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 40px;
+      box-sizing: border-box;
+      font-family: sans-serif;
+    }
+    .mermaid {
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="mermaid">
+flowchart LR
+    A[Scan before receiving] --> B[Open body shape and directional first touch]
+    B --> C[Possession retention]
+    C --> D[More forward passes and carries]
+    D --> E[Chance creation]
+
+    F[Protect and turn under pressure] --> C
+    G[Drive and beat first defender] --> D
+    H[Support angles and unmarking] --> D
+    I[Finish from pass or dribble] --> J[Goal threat]
+
+    K[Immediate transition reaction] --> L[Early regain]
+    L --> E
+    M[First defender press and delay] --> N[Stops direct attack]
+    O[Second defender cover and compactness] --> P[Defensive recovery]
+    N --> P
+  </div>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+</body>
+</html>

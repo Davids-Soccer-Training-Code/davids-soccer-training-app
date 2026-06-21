@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
   BarChart2,
+  Trophy,
   Target,
   FileText,
   Upload,
@@ -12,6 +13,10 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { PlayerInsights } from "./PlayerInsights";
+import { PlayerRank } from "./PlayerRank";
+import { RankLadder, RankBadge } from "./RankLadder";
+import { RANK_BY_KEY } from "@/lib/rankSystem";
+import type { PlayerRankSummary } from "@/lib/getPlayerRank";
 import { PlayerGoals } from "./PlayerGoals";
 import { PlayerUploads } from "./PlayerUploads";
 import { PlayerSessions } from "./PlayerSessions";
@@ -22,6 +27,7 @@ import {
 } from "./playerHashNavigation";
 
 type TabType =
+  | "rank"
   | "tests"
   | "goals"
   | "reports"
@@ -47,6 +53,7 @@ const SIDEBAR_ITEMS: {
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "rank", label: "Rank Up", icon: Trophy },
   { id: "tests", label: "My Progress", icon: BarChart2 },
   { id: "goals", label: "Goals", icon: Target },
   { id: "reports", label: "Feedback & Reports", icon: FileText },
@@ -97,6 +104,14 @@ function PlayerDashboard({
   const [lastTest, setLastTest] = useState<string | null | undefined>(
     undefined
   );
+  const [rank, setRank] = useState<PlayerRankSummary | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/players/${playerId}/rank`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setRank(d.rank))
+      .catch(() => {});
+  }, [playerId]);
 
   useEffect(() => {
     Promise.all([
@@ -218,6 +233,40 @@ function PlayerDashboard({
         title="Dashboard"
         description="Your training hub — see everything at a glance."
       />
+      {rank ? (
+        <button
+          type="button"
+          onClick={() => onNavigate("rank")}
+          className="group mb-4 block w-full rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50">
+                <Trophy className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Current Rank
+                </div>
+                <div className="text-base font-bold text-gray-900 leading-tight">
+                  {RANK_BY_KEY[rank.overall.rank].name}
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <RankBadge
+                name={RANK_BY_KEY[rank.overall.rank].shortName}
+                color={rank.overall.color}
+                size="sm"
+              />
+              <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <RankLadder currentIndex={rank.overall.index} />
+          </div>
+        </button>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map(({ icon: Icon, tab, title, stat, sub, iconBg, iconColor }) => (
           <button
@@ -330,6 +379,16 @@ export default function PlayerContentTabs({
         <div className="min-w-0">
           {activeTab === "dashboard" && (
             <PlayerDashboard playerId={playerId} onNavigate={handleTabClick} />
+          )}
+          {activeTab === "rank" && (
+            <>
+              <TabPageHeader
+                icon={Trophy}
+                title="Rank Up"
+                description="Your rank, what each test is at, and how to reach the next level."
+              />
+              <PlayerRank playerId={playerId} isAdminMode={isAdminMode} />
+            </>
           )}
           {activeTab === "tests" && (
             <>

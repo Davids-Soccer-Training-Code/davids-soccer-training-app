@@ -14,72 +14,6 @@ type PlayerTestRow = {
   updated_at: string;
 };
 
-function toNullableFiniteNumber(v: unknown) {
-  if (v === undefined || v === null || v === "") return null;
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function cleanOneVOneScores(scores: Record<string, unknown>) {
-  const roundsRaw = (scores as { rounds?: unknown }).rounds;
-  let rounds: Array<number | null> = [];
-  if (Array.isArray(roundsRaw)) {
-    rounds = roundsRaw.map(toNullableFiniteNumber);
-  } else {
-    const entries = Object.entries(scores)
-      .map(([k, v]) => {
-        const m = /^onevone_round_(\d+)$/.exec(k);
-        if (!m) return null;
-        return [Number(m[1]), toNullableFiniteNumber(v)] as const;
-      })
-      .filter(Boolean) as Array<readonly [number, number | null]>;
-    entries.sort((a, b) => a[0] - b[0]);
-    rounds = entries.map((e) => e[1]);
-  }
-
-  rounds = rounds.slice(0, 50);
-  return { rounds };
-}
-
-function cleanSkillMovesScores(scores: Record<string, unknown>) {
-  const movesRaw = (scores as { moves?: unknown }).moves;
-  let moves: Array<{ name: string; score: number | null }> = [];
-  if (Array.isArray(movesRaw)) {
-    moves = movesRaw
-      .map((m) => {
-        const obj = (m ?? {}) as Record<string, unknown>;
-        const name = String(obj.name ?? "").trim();
-        const score = toNullableFiniteNumber(obj.score);
-        if (!name && score === null) return null;
-        return { name: name || "Move", score };
-      })
-      .filter(Boolean) as Array<{ name: string; score: number | null }>;
-  } else {
-    // Back-compat for older `{ skillmove_1: 3, ... }` format (and optional `skillmove_name_1`).
-    const found: Array<{ idx: number; name: string; score: number | null }> =
-      [];
-    for (const [k, v] of Object.entries(scores)) {
-      const m = /^skillmove_(\d+)$/.exec(k);
-      if (!m) continue;
-      const idx = Number(m[1]);
-      const score = toNullableFiniteNumber(v);
-      const nameKey = `skillmove_name_${idx}`;
-      const rawName = scores[nameKey];
-      const name =
-        rawName === undefined || rawName === null
-          ? `Move ${idx}`
-          : String(rawName).trim() || `Move ${idx}`;
-      if (score === null && !name) continue;
-      found.push({ idx, name, score });
-    }
-    found.sort((a, b) => a.idx - b.idx);
-    moves = found.map(({ name, score }) => ({ name, score }));
-  }
-
-  moves = moves.slice(0, 50);
-  return { moves };
-}
-
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ playerId: string }> }
@@ -133,23 +67,17 @@ export async function POST(
   const def = getTestDefinitionByName(testName);
   if (!def) return new Response("Unknown test_name", { status: 400 });
 
-  let cleaned: Record<string, unknown> = {};
-  if (testName === "1v1") {
-    cleaned = cleanOneVOneScores(scores);
-  } else if (testName === "Skill Moves") {
-    cleaned = cleanSkillMovesScores(scores);
-  } else {
-    // Only keep keys we recognize for that test (and coerce numbers where possible).
-    for (const f of def.fields) {
-      const v = scores[f.key];
-      if (v === undefined || v === null || v === "") continue;
-      if (f.type === "number") {
-        const n = typeof v === "number" ? v : Number(v);
-        if (!Number.isFinite(n)) continue;
-        cleaned[f.key] = n;
-      } else {
-        cleaned[f.key] = String(v);
-      }
+  const cleaned: Record<string, unknown> = {};
+  // Only keep keys we recognize for that test (and coerce numbers where possible).
+  for (const f of def.fields) {
+    const v = scores[f.key];
+    if (v === undefined || v === null || v === "") continue;
+    if (f.type === "number") {
+      const n = typeof v === "number" ? v : Number(v);
+      if (!Number.isFinite(n)) continue;
+      cleaned[f.key] = n;
+    } else {
+      cleaned[f.key] = String(v);
     }
   }
 
