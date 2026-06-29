@@ -243,6 +243,28 @@ export function checkRequirement(req: RankRequirement, s: Scores): boolean {
   return req.conditions.every((c) => atLeast(c.value(s), c.min));
 }
 
+// Merge a test's score rows (ordered newest-first) into one effective score
+// object, taking the most recent non-blank value for each field. Different rank
+// tiers of the same test use different fields (e.g. Dribbling green/red read the
+// figure-8 loops, blue reads the cross-dribble loops), and a coach often records
+// only one tier in a given session. Evaluating rank from the single latest row
+// alone would treat the untouched fields as blank and wipe out earned progress,
+// so we carry each field's last recorded reading forward.
+export function mergeScoreHistory(
+  rowsNewestFirst: Array<Scores | null | undefined>
+): Scores {
+  const merged: Scores = {};
+  for (const row of rowsNewestFirst) {
+    if (!row) continue;
+    for (const [key, value] of Object.entries(row)) {
+      if (key in merged) continue;
+      if (value === null || value === undefined || value === "") continue;
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
 // 0..1 — how close the scores are to satisfying the requirement (weakest link).
 export function requirementProgress(req: RankRequirement, s: Scores): number {
   if (!req.conditions.length) return 1;

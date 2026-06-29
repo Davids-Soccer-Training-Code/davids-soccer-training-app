@@ -6,6 +6,7 @@ import {
   computeOverallRank,
   nextRankChecklist,
   missionDoneByRankFrom,
+  mergeScoreHistory,
   type RankKey,
   type TestRankResult,
   type NextRankChecklist,
@@ -73,9 +74,17 @@ export async function getPlayerRank(
     created_at: string;
   }>;
 
-  const latest = new Map<string, Record<string, unknown>>();
+  // Rows arrive newest-first (test_date DESC, created_at DESC). Group every row
+  // per test and merge them so each rank tier reads its own field's last value,
+  // rather than only the most recent session's scores.
+  const rowsByTest = new Map<string, Array<Record<string, unknown>>>();
   for (const r of testRows) {
-    if (!latest.has(r.test_name)) latest.set(r.test_name, r.scores ?? {});
+    if (!rowsByTest.has(r.test_name)) rowsByTest.set(r.test_name, []);
+    rowsByTest.get(r.test_name)!.push(r.scores ?? {});
+  }
+  const latest = new Map<string, Record<string, unknown>>();
+  for (const [name, rows] of rowsByTest) {
+    latest.set(name, mergeScoreHistory(rows));
   }
 
   const [sessionCount, missions] = await Promise.all([

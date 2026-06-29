@@ -8,6 +8,7 @@ import {
   computeOverallRank,
   nextRankChecklist,
   missionDoneByRankFrom,
+  mergeScoreHistory,
 } from "./rankSystem";
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -394,10 +395,17 @@ export function computePlayerProfile(args: {
   const sessionCount = args.sessionCount ?? 0;
   const missionDoneByRank = missionDoneByRankFrom(args.missions ?? []);
 
+  // For rank evaluation, merge each test's full history (newest-first) so that a
+  // rank tier reads its own field's last recorded value even when the most recent
+  // session only covered a different tier's fields (e.g. cross-dribble loops
+  // entered later must not wipe earlier figure-8 loop progress). pickLatestByTest
+  // sorts each byName list newest-first.
+  const mergedScoresByTest = (testName: string) =>
+    mergeScoreHistory((byName.get(testName) ?? []).map((t) => t.scores ?? {}));
+
   const perTest: Record<string, TestRankResult> = {};
   for (const testName of RANK_TESTS) {
-    const latestT = latest.get(testName);
-    perTest[testName] = evaluateTest(testName, latestT?.scores ?? {});
+    perTest[testName] = evaluateTest(testName, mergedScoresByTest(testName));
   }
 
   const overall = computeOverallRank({
@@ -407,7 +415,7 @@ export function computePlayerProfile(args: {
   });
 
   const latestScores = Object.fromEntries(
-    RANK_TESTS.map((t) => [t, latest.get(t)?.scores ?? {}])
+    RANK_TESTS.map((t) => [t, mergedScoresByTest(t)])
   );
   const next = nextRankChecklist({
     currentRankIndex: overall.rankIndex,
