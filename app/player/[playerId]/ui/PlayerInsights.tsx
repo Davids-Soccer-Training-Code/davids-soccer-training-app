@@ -5,6 +5,7 @@ import {
   evaluateTest,
   metricRankIndex,
   isRankTest,
+  mergeScoreHistory,
   RANK_BY_KEY,
 } from "@/lib/rankSystem";
 import { RankBadge } from "./RankLadder";
@@ -1010,28 +1011,44 @@ export function PlayerInsights({
   const testProgressions = latest?.data?.test_progressions ?? {};
 
   const latestByTestName = useMemo(() => {
+    // Gather every row per test (deduped by id), so we can show the accumulated
+    // picture rather than just the newest session. A test's rank tiers use
+    // different fields (e.g. Dribbling green/red = figure-8 loops, blue = cross-
+    // dribble loops); a session that records only one tier shouldn't blank out
+    // the others. We carry each field's most recent value forward.
+    const rowsByName = new Map<
+      string,
+      Array<{ id?: string; test_date: string; scores: Record<string, unknown> }>
+    >();
+    const seen = new Set<string>();
+    const collect = (t: {
+      id?: string;
+      test_name: string;
+      test_date: string;
+      scores?: Record<string, unknown> | null;
+    }) => {
+      if (t.id && seen.has(t.id)) return;
+      if (t.id) seen.add(t.id);
+      if (!rowsByName.has(t.test_name)) rowsByName.set(t.test_name, []);
+      rowsByName
+        .get(t.test_name)!
+        .push({ id: t.id, test_date: t.test_date, scores: t.scores ?? {} });
+    };
+    for (const t of tests) collect(t);
+    for (const t of rawTests) collect(t);
+
     const map = new Map<
       string,
       { test_date: string; scores: Record<string, unknown> }
     >();
-
-    for (const t of tests) {
-      const existing = map.get(t.test_name);
-      if (!existing || t.test_date > existing.test_date) {
-        map.set(t.test_name, {
-          test_date: t.test_date,
-          scores: t.scores ?? {},
-        });
-      }
-    }
-    for (const t of rawTests) {
-      const existing = map.get(t.test_name);
-      if (!existing || t.test_date > existing.test_date) {
-        map.set(t.test_name, {
-          test_date: t.test_date,
-          scores: t.scores ?? {},
-        });
-      }
+    for (const [name, rows] of rowsByName) {
+      const newestFirst = rows
+        .slice()
+        .sort((a, b) => (a.test_date < b.test_date ? 1 : a.test_date > b.test_date ? -1 : 0));
+      map.set(name, {
+        test_date: newestFirst[0].test_date,
+        scores: mergeScoreHistory(newestFirst.map((r) => r.scores)),
+      });
     }
     return map;
   }, [rawTests, tests]);

@@ -385,10 +385,16 @@ export function computePlayerProfile(args: {
     test_date: t.test_date,
   }));
 
-  // Merge per-test metrics from the latest entry of each test.
-  for (const t of latest.values()) {
-    Object.assign(metrics, computeMetricsForSingleTest(t.test_name, t.scores ?? {}));
-    inputs[t.test_name] = (t.scores ?? {}) as Json;
+  // Per-test current snapshot: merge each test's history (newest-first) so a
+  // field keeps its last recorded value even when the most recent session only
+  // covered a different rank tier's fields (e.g. cross-dribble loops entered
+  // later must not blank out earlier figure-8 loop values). byName lists are
+  // sorted newest-first by pickLatestByTest. Per-session timelines below stay
+  // per-row and are unaffected.
+  for (const [testName, rows] of byName.entries()) {
+    const mergedScores = mergeScoreHistory(rows.map((r) => r.scores ?? {}));
+    Object.assign(metrics, computeMetricsForSingleTest(testName, mergedScores));
+    inputs[testName] = mergedScores as Json;
   }
 
   // --- Rank computation ---------------------------------------------------
