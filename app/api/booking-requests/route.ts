@@ -18,6 +18,20 @@ function normalizeCoach(value: unknown): string {
   return c in COACH_LABELS ? c : "david";
 }
 
+// CRM sessions carry a free-text title. A title that names another coach — e.g.
+// "Coach Simon" (optionally with trailing notes) — means the session belongs to
+// that coach's calendar. Untitled sessions, or anything that doesn't name a
+// non-David coach, belong to Coach David.
+function coachFromCrmTitle(title: string | null): string {
+  const t = (title ?? "").trim().toLowerCase();
+  if (!t) return "david";
+  for (const [key, label] of Object.entries(COACH_LABELS)) {
+    if (key === "david") continue;
+    if (t === label.toLowerCase() || t.startsWith(label.toLowerCase())) return key;
+  }
+  return "david";
+}
+
 export type Slot = {
   date: string;  // YYYY-MM-DD
   start: string; // HH:MM
@@ -73,44 +87,45 @@ export async function GET(req: NextRequest) {
       `) as unknown as Array<{ id: string; date: string; start: string; coach: string }>)
     : [];
 
-  // CRM sessions are Coach David's own calendar — only block David's availability.
-  if (!all && coach !== "david") {
-    return Response.json({ bookedSlots: booked, adminBlocked });
-  }
-
   // CRM sessions: session_date is stored as UTC in a TIMESTAMP WITHOUT TZ column.
   // Cast to TIMESTAMPTZ (so Postgres treats the raw value as UTC), then convert
   // to Arizona time (America/Phoenix = UTC-7, no daylight saving ever).
   // CRM sessions store only a start; treat each as a standard 1-hour session so
   // the calendar can block every slot the session overlaps (e.g. a 6:30 session
-  // covers both the 6:00 and 7:00 slots).
+  // covers both the 6:00 and 7:00 slots). The title decides which coach the
+  // session belongs to (see coachFromCrmTitle).
   const crmRegular = (await sql`
     SELECT
       ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
       to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
-      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end"
+      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end",
+      title
     FROM crm_sessions
     WHERE cancelled IS NOT TRUE
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string; end: string }>;
+  `) as unknown as Array<{ date: string; start: string; end: string; title: string | null }>;
 
   const crmFirst = (await sql`
     SELECT
       ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
       to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
-      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end"
+      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end",
+      title
     FROM crm_first_sessions
     WHERE cancelled IS NOT TRUE
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
       AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string; end: string }>;
+  `) as unknown as Array<{ date: string; start: string; end: string; title: string | null }>;
 
-  // CRM sessions belong to Coach David — tag them so the calendar treats them as his.
-  const crmDavid = [...crmRegular, ...crmFirst].map((s) => ({ ...s, coach: "david" }));
+  // Route each CRM session to its coach by title, then keep only the ones this
+  // request cares about — every coach ("all") or the single requested coach.
+  const crmSlots = [...crmRegular, ...crmFirst]
+    .map(({ title, ...s }) => ({ ...s, coach: coachFromCrmTitle(title) }))
+    .filter((s) => all || s.coach === coach);
 
   return Response.json({
-    bookedSlots: [...booked, ...crmDavid],
+    bookedSlots: [...booked, ...crmSlots],
     adminBlocked,
   });
 }
