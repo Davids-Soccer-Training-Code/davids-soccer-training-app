@@ -21,8 +21,8 @@ const DAVID_WEEKDAY: SlotDef[] = [...MORNING_FULL, ...EVENING];
 const DAVID_SATURDAY: SlotDef[] = [...EVENING];
 const DAVID_SUNDAY: SlotDef[] = [...MORNING_FULL];
 
-// Coach Simon — Mon/Wed/Fri mornings 8–11, plus Tue & Thu mornings + evenings.
-const SIMON_TUE_THU: SlotDef[] = [...MORNING_FULL, ...EVENING];
+// Coach Simon — Mon/Thu/Fri mornings 8–11, plus Tue & Wed mornings + evenings.
+const SIMON_TUE_WED: SlotDef[] = [...MORNING_FULL, ...EVENING];
 const SIMON_MIDWEEK: SlotDef[] = [...MORNING_FULL];
 
 // dow: 0 = Sunday … 6 = Saturday
@@ -33,8 +33,8 @@ function davidSlots(dow: number): SlotDef[] {
 }
 
 function simonSlots(dow: number): SlotDef[] {
-  if (dow === 2 || dow === 4) return SIMON_TUE_THU; // Tue & Thu: mornings + evening
-  if (dow === 1 || dow === 3 || dow === 5) return SIMON_MIDWEEK; // Mon/Wed/Fri mornings
+  if (dow === 2 || dow === 3) return SIMON_TUE_WED; // Tue & Wed: mornings + evening
+  if (dow === 1 || dow === 4 || dow === 5) return SIMON_MIDWEEK; // Mon/Thu/Fri mornings
   return [];
 }
 
