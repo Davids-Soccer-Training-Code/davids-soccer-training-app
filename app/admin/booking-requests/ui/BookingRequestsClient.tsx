@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { CheckCircle, XCircle, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { COACH_LABELS } from "@/lib/bookingSchedule";
+import { COACH_ACCENT, DAVID_BADGE } from "@/lib/coachTheme";
 
 export type BookingRequest = {
   id: string;
@@ -18,13 +20,13 @@ export type BookingRequest = {
   created_at: string;
 };
 
-const COACH_LABELS: Record<string, string> = {
-  david: "Coach David",
-  simon: "Coach Simon",
-};
-
 function coachLabel(coach: string | null): string {
   return COACH_LABELS[coach ?? "david"] ?? "Coach David";
+}
+
+// Match the booking calendar: each non-David coach has an accent badge, David is green.
+function coachBadge(coach: string | null): string {
+  return (coach && COACH_ACCENT[coach]?.badge) || DAVID_BADGE;
 }
 
 function fmt(t: string): string {
@@ -73,7 +75,7 @@ function RequestCard({
             >
               {r.status}
             </span>
-            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+            <span className={coachBadge(r.coach)}>
               {coachLabel(r.coach)}
             </span>
           </div>

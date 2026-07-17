@@ -2,17 +2,13 @@ import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { sendSmsViaTwilio } from "@/lib/twilio";
-import { getSlotsForCoachDow } from "@/lib/bookingSchedule";
+import { getSlotsForCoachDow, COACH_LABELS } from "@/lib/bookingSchedule";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Which coaches can take bookings. Anything unrecognized falls back to David.
-const COACH_LABELS: Record<string, string> = {
-  david: "Coach David",
-  simon: "Coach Simon",
-};
-
+// Which coaches can take bookings comes from COACH_LABELS (shared with the
+// calendar). Anything unrecognized falls back to David.
 function normalizeCoach(value: unknown): string {
   const c = typeof value === "string" ? value.trim().toLowerCase() : "";
   return c in COACH_LABELS ? c : "david";

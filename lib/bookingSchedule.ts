@@ -25,6 +25,10 @@ const DAVID_SUNDAY: SlotDef[] = [...MORNING_FULL];
 const SIMON_TUE_WED: SlotDef[] = [...MORNING_FULL, ...EVENING];
 const SIMON_MIDWEEK: SlotDef[] = [...MORNING_FULL];
 
+// Coach MarcAnthony — mornings 8–11 Mon–Sat, plus evenings 5–8 on Mon/Tue/Thu/Sat.
+const MARCANTHONY_FULL: SlotDef[] = [...MORNING_FULL, ...EVENING];
+const MARCANTHONY_MORNING: SlotDef[] = [...MORNING_FULL];
+
 // dow: 0 = Sunday … 6 = Saturday
 function davidSlots(dow: number): SlotDef[] {
   if (dow >= 1 && dow <= 5) return DAVID_WEEKDAY;
@@ -38,6 +42,39 @@ function simonSlots(dow: number): SlotDef[] {
   return [];
 }
 
+function marcanthonySlots(dow: number): SlotDef[] {
+  if (dow === 0) return []; // Sunday off
+  // Evenings on Mon, Tue, Thu, Sat; mornings every Mon–Sat.
+  const hasEvening = dow === 1 || dow === 2 || dow === 4 || dow === 6;
+  return hasEvening ? MARCANTHONY_FULL : MARCANTHONY_MORNING;
+}
+
 export function getSlotsForCoachDow(coach: string, dow: number): SlotDef[] {
-  return coach === "simon" ? simonSlots(dow) : davidSlots(dow);
+  if (coach === "simon") return simonSlots(dow);
+  if (coach === "marcanthony") return marcanthonySlots(dow);
+  return davidSlots(dow);
+}
+
+// ── Coach identity ───────────────────────────────────────────────────────────
+// Single source of truth for which coaches take bookings and how they're named.
+// Imported by the API route, the booking calendar, and the admin dashboard so
+// their labels and valid-coach checks can never drift apart.
+
+export const COACH_LABELS: Record<string, string> = {
+  david: "Coach David",
+  simon: "Coach Simon",
+  marcanthony: "Coach MarcAnthony",
+};
+
+// Display/toggle order. "all" is layered on top of this in the UI.
+export const COACH_SLUGS = ["david", "simon", "marcanthony"] as const;
+export type CoachSlug = (typeof COACH_SLUGS)[number];
+export type CoachSelection = "all" | CoachSlug;
+
+// Normalize a ?coach= URL param (or toggle value) to a known selection.
+// Anything unrecognized — including an empty param — falls back to "all".
+export function parseCoachParam(value: string | null | undefined): CoachSelection {
+  const v = (value ?? "").trim().toLowerCase();
+  if (v === "all") return "all";
+  return (COACH_SLUGS as readonly string[]).includes(v) ? (v as CoachSlug) : "all";
 }

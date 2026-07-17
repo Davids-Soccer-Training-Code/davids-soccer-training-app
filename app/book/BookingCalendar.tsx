@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Unlock } from "lucide-react";
-import { getSlotsForCoachDow, type SlotDef } from "@/lib/bookingSchedule";
+import { getSlotsForCoachDow, COACH_LABELS, COACH_SLUGS, type SlotDef } from "@/lib/bookingSchedule";
+import { accentFor, COACH_ACCENT } from "@/lib/coachTheme";
 
 // ── Slot generation ────────────────────────────────────────────────────────────
 
@@ -18,9 +19,9 @@ function toDateStr(d: Date): string {
 type CoachSlot = SlotDef & { coach: string };
 type DaySlots = { date: string; label: string; slots: CoachSlot[] };
 
-// "all" expands to both coaches (David first, then Simon); otherwise just the one.
+// "all" expands to every coach (in display order); otherwise just the one.
 function coachesFor(coach: string): string[] {
-  return coach === "all" ? ["david", "simon"] : [coach];
+  return coach === "all" ? [...COACH_SLUGS] : [coach];
 }
 
 function generateDays(coach: string, weeks = 6): DaySlots[] {
@@ -71,7 +72,7 @@ function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: strin
 }
 type FormState = { date: string; start: string; end: string; dateLabel: string; coach: string };
 
-const COACH_LABEL: Record<string, string> = { david: "Coach David", simon: "Coach Simon" };
+const COACH_LABEL = COACH_LABELS;
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -298,17 +299,18 @@ export default function BookingCalendar({
                             form?.date === day.date && form.start === slot.start && form.coach === slot.coach;
                           const slotKey = `${slot.coach}-${slot.start}`;
                           const blockKey = `${slot.coach}|${day.date}|${slot.start}`;
-                          // In the "all" view, set Coach Simon's slots apart in blue with a label.
-                          const tagSimon = isAll && slot.coach === "simon";
-                          const coachTag = tagSimon ? (
+                          // In the "all" view, set each non-David coach's slots
+                          // apart in their own accent color with a label.
+                          const accent = accentFor(slot.coach, isAll);
+                          const coachTag = accent ? (
                             <span
                               className={
                                 isSelected
                                   ? "ml-1 text-[11px] font-semibold text-white"
-                                  : "ml-1 text-[11px] font-semibold text-sky-700"
+                                  : `ml-1 text-[11px] font-semibold ${accent.tagText}`
                               }
                             >
-                              (Coach Simon)
+                              {accent.tag}
                             </span>
                           ) : null;
 
@@ -349,8 +351,8 @@ export default function BookingCalendar({
                               <div
                                 key={slotKey}
                                 className={
-                                  tagSimon
-                                    ? "flex items-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-2 py-1.5"
+                                  accent
+                                    ? accent.adminWrap
                                     : "flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-1.5"
                                 }
                               >
@@ -358,8 +360,8 @@ export default function BookingCalendar({
                                   type="button"
                                   onClick={() => openForm(day.date, slot.start, slot.end, day.label, slot.coach)}
                                   className={
-                                    tagSimon
-                                      ? (isSelected ? "text-xs font-semibold text-sky-900 underline" : "text-xs font-semibold text-sky-700 hover:underline")
+                                    accent
+                                      ? (isSelected ? accent.adminBtnSelected : accent.adminBtn)
                                       : (isSelected ? "text-xs font-semibold text-emerald-900 underline" : "text-xs font-semibold text-emerald-700 hover:underline")
                                   }
                                 >
@@ -379,11 +381,10 @@ export default function BookingCalendar({
                             );
                           }
 
-                          // Normal public available slot — Simon's are blue in "all" view
-                          const baseClass = tagSimon
-                            ? (isSelected
-                                ? "rounded-xl border border-sky-600 bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow"
-                                : "rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:border-sky-400 hover:bg-sky-100")
+                          // Normal public available slot — each accent coach gets
+                          // its own color in the "all" view; everyone else is green.
+                          const baseClass = accent
+                            ? (isSelected ? accent.publicBtnSelected : accent.publicBtn)
                             : (isSelected
                                 ? "rounded-xl border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow"
                                 : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100");
@@ -432,9 +433,8 @@ export default function BookingCalendar({
                 </h3>
                 <p
                   className={
-                    form.coach === "simon"
-                      ? "mt-0.5 text-sm font-medium text-sky-700"
-                      : "mt-0.5 text-sm font-medium text-emerald-700"
+                    COACH_ACCENT[form.coach]?.formText ??
+                    "mt-0.5 text-sm font-medium text-emerald-700"
                   }
                 >
                   {form.dateLabel} &middot; {fmt(form.start)} – {fmt(form.end)}

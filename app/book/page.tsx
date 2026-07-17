@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { parseCoachParam } from "@/lib/bookingSchedule";
 import BookingSection from "./BookingSection";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +12,17 @@ export const metadata = {
   description: "View available private training slots and request a session.",
 };
 
-export default async function BookPage() {
+export default async function BookPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ coach?: string | string[] }>;
+}) {
   const session = await getServerSession(authOptions);
   const isAdmin = session?.user?.isAdmin === true;
+
+  // ?coach=david | simon | marcanthony | all selects the coach tab (defaults to "all").
+  const coachParam = (await searchParams).coach;
+  const initialCoach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
   return (
     <div className="min-h-screen bg-emerald-50">
       <header className="bg-linear-to-r from-emerald-600 to-emerald-700">
@@ -52,7 +61,7 @@ export default async function BookPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <BookingSection isAdmin={isAdmin} />
+        <BookingSection isAdmin={isAdmin} initialCoach={initialCoach} />
       </main>
     </div>
   );
