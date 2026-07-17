@@ -113,6 +113,18 @@ export default function BookingSection({
   // Which coaches' hours to show, in order.
   const visibleCoaches: CoachSlug[] = isAll ? [...COACH_SLUGS] : [coach as CoachSlug];
 
+  // Giant title that makes the selected coach unmistakable.
+  const titleText = isAll ? "All Coaches" : selectedLabel;
+  const titleColor = selectedAccent ? selectedAccent.tagText : "text-emerald-700";
+
+  // Switch coaches and mirror the choice in the URL (?coach=…) so it stays
+  // shareable and the address bar reflects the current tab.
+  function selectCoach(value: CoachSelection) {
+    setCoach(value);
+    const url = value === "all" ? "/book" : `/book?coach=${value}`;
+    window.history.replaceState(null, "", url);
+  }
+
   return (
     <div>
       {/* Coach switcher */}
@@ -125,7 +137,7 @@ export default function BookingSection({
             <button
               key={t.value}
               type="button"
-              onClick={() => setCoach(t.value)}
+              onClick={() => selectCoach(t.value)}
               className={
                 coach === t.value
                   ? "rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
@@ -137,6 +149,11 @@ export default function BookingSection({
           ))}
         </div>
       </div>
+
+      {/* Giant title — makes the selected coach unmistakable */}
+      <h2 className={`mb-4 text-4xl font-extrabold tracking-tight sm:text-5xl ${titleColor}`}>
+        {titleText}
+      </h2>
 
       {/* "All" view legend — explains each coach's colored slots */}
       {isAll && (
@@ -152,14 +169,6 @@ export default function BookingSection({
           ))}{" "}
           are with that coach — everything else is with Coach David. Pick a coach&apos;s tab above
           to learn more about them.
-        </div>
-      )}
-
-      {/* Heads-up that you're not booking David — single accent-coach view only */}
-      {selectedAccent && (
-        <div className={selectedAccent.banner}>
-          <span className="font-semibold">Heads up:</span> these sessions are with{" "}
-          <span className="font-semibold">{selectedLabel}</span> — not Coach David.
         </div>
       )}
 
