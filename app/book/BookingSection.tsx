@@ -25,8 +25,8 @@ const COACH_META: Record<CoachSlug, CoachMeta> = {
   },
   simon: {
     hours: [
-      { days: "Tue – Fri", time: "8:00 AM – 11:00 AM" },
-      { days: "Tuesday evening", time: "5:00 – 8:00 PM" },
+      { days: "Mon – Fri", time: "8:00 – 11:00 AM" },
+      { days: "Tue & Wed evenings", time: "5:00 – 8:00 PM" },
     ],
     bio: (
       <>
@@ -46,7 +46,7 @@ const COACH_META: Record<CoachSlug, CoachMeta> = {
             perspective to player development.
           </p>
           <p>
-            For the past <span className="font-semibold text-gray-900">3 months</span> he&apos;s
+            For the past <span className="font-semibold text-gray-900">3 months</span>{" "}he&apos;s
             been working directly with Coach David, learning his technical coaching expertise so
             every session stays true to the David&apos;s Soccer Training standard.
           </p>
