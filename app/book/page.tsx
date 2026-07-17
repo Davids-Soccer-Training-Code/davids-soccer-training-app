@@ -1,16 +1,38 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { parseCoachParam } from "@/lib/bookingSchedule";
+import { parseCoachParam, COACH_LABELS } from "@/lib/bookingSchedule";
 import BookingSection from "./BookingSection";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Book a Session | David's Soccer Training",
-  description: "View available private training slots and request a session.",
-};
+function coachFromSearchParams(coachParam?: string | string[]): string | null {
+  const coach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
+  return coach === "all" ? null : COACH_LABELS[coach];
+}
+
+// Title/preview reflect the ?coach= param so a shared link (e.g. in a text
+// message) reads "Book a Session with Coach MarcAnthony". openGraph.title is
+// what iMessage and most link-preview cards display.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ coach?: string | string[] }>;
+}): Promise<Metadata> {
+  const coachLabel = coachFromSearchParams((await searchParams).coach);
+  const heading = coachLabel ? `Book a Session with ${coachLabel}` : "Book a Session";
+  const description = coachLabel
+    ? `Book a private soccer training session with ${coachLabel}. View open slots and request a time.`
+    : "View available private training slots and request a session.";
+  return {
+    title: `${heading} | David's Soccer Training`,
+    description,
+    openGraph: { title: heading, description },
+    twitter: { card: "summary", title: heading, description },
+  };
+}
 
 export default async function BookPage({
   searchParams,
