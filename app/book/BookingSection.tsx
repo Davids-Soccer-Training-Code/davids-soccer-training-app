@@ -34,16 +34,14 @@ const COACH_META: Record<CoachSlug, CoachMeta> = {
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-gray-700">
           <p>
             Coach Simon is a soccer coach from{" "}
-            <span className="font-semibold text-gray-900">Africa</span> who played his way to
+            <span className="font-semibold text-gray-900">Kenya</span> who played his way to
             the <span className="font-semibold text-gray-900">semi-pro</span> level before
             moving to America to coach.
           </p>
           <p>
-            He holds coaching licenses from{" "}
-            <span className="font-semibold text-gray-900">South Africa</span>, the{" "}
-            <span className="font-semibold text-gray-900">USA</span>, and{" "}
-            <span className="font-semibold text-gray-900">Brazil</span>, bringing a global
-            perspective to player development.
+            He holds a coaching certificate from the{" "}
+            <span className="font-semibold text-gray-900">KNVB</span> — the Royal Dutch Football
+            Association — bringing a global perspective to player development.
           </p>
           <p>
             For the past <span className="font-semibold text-gray-900">3 months</span>{" "}he&apos;s
@@ -54,20 +52,20 @@ const COACH_META: Record<CoachSlug, CoachMeta> = {
       </>
     ),
   },
-  marcanthony: {
+  simpson: {
     hours: [
       { days: "Mon – Sat", time: "8:00 – 11:00 AM" },
       { days: "Mon, Tue, Thu & Sat", time: "5:00 – 8:00 PM" },
     ],
     bio: (
       <>
-        <h2 className="text-lg font-semibold text-gray-900">Meet Coach MarcAnthony</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Meet Coach Simpson</h2>
         <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-violet-700">
           Head Coach
         </p>
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-gray-700">
           <p>
-            Coach MarcAnthony is a lifelong soccer player with experience competing in both the{" "}
+            Coach Simpson is a lifelong soccer player with experience competing in both the{" "}
             <span className="font-semibold text-gray-900">United States</span> and{" "}
             <span className="font-semibold text-gray-900">Germany</span>.
           </p>
@@ -76,7 +74,7 @@ const COACH_META: Record<CoachSlug, CoachMeta> = {
             and develop a deeper understanding of the game.
           </p>
           <p>
-            MarcAnthony brings energy, positivity, and attention to detail to every session,
+            Coach Simpson brings energy, positivity, and attention to detail to every session,
             creating an environment where players are challenged, encouraged, and inspired to
             reach their full potential.
           </p>

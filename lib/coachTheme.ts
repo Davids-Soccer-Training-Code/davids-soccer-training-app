@@ -37,8 +37,8 @@ export const COACH_ACCENT: Record<string, CoachAccent> = {
     formText: "mt-0.5 text-sm font-medium text-sky-700",
     banner: "mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900",
   },
-  marcanthony: {
-    tag: "(Coach MarcAnthony)",
+  simpson: {
+    tag: "(Coach Simpson)",
     tagText: "text-violet-700",
     publicBtn:
       "rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:border-violet-400 hover:bg-violet-100",

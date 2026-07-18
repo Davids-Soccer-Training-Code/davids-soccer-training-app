@@ -14,7 +14,7 @@ function coachFromSearchParams(coachParam?: string | string[]): string | null {
 }
 
 // Title/preview reflect the ?coach= param so a shared link (e.g. in a text
-// message) reads "Book a Session with Coach MarcAnthony". openGraph.title is
+// message) reads "Book a Session with Coach Simpson". openGraph.title is
 // what iMessage and most link-preview cards display.
 export async function generateMetadata({
   searchParams,
@@ -42,7 +42,7 @@ export default async function BookPage({
   const session = await getServerSession(authOptions);
   const isAdmin = session?.user?.isAdmin === true;
 
-  // ?coach=david | simon | marcanthony | all selects the coach tab (defaults to "all").
+  // ?coach=david | simon | simpson | all selects the coach tab (defaults to "all").
   const coachParam = (await searchParams).coach;
   const initialCoach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
   return (
