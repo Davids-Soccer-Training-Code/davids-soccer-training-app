@@ -153,10 +153,17 @@ export default function BookingSection({
       )}
 
       {/* 24-hour notice — names the selected coach */}
-      <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <span className="font-semibold">Important:</span>{" "}If you book less than 24 hours in
         advance, there&apos;s a chance {selectedLabel ?? "your coach"}{" "}won&apos;t see your
         request in time. Please text or call Coach David directly to confirm the session.
+      </div>
+
+      {/* Weather policy — sessions are cancelled in unsafe conditions */}
+      <div className="mb-6 rounded-2xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+        <span className="font-semibold">⛈️ Weather policy:</span>{" "}For everyone&apos;s safety, we
+        cancel sessions when it&apos;s over 110°F, there&apos;s lightning within 10 miles, or
+        heavy rain. If we have to cancel for weather, we&apos;ll reach out to reschedule.
       </div>
 
       <div className="mb-8">

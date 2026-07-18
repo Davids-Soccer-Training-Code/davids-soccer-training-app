@@ -44,6 +44,11 @@ const sections = [
     description: "Edit each coach's booking availability and bio shown on the public calendar.",
     href: "/admin/coaches",
   },
+  {
+    title: "Coach Sessions",
+    description: "See each coach's upcoming scheduled sessions at a glance.",
+    href: "/admin/coach-sessions",
+  },
 ];
 
 export default function AdminPage() {
