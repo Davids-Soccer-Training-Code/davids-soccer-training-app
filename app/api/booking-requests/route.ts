@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { sendSmsViaTwilio } from "@/lib/twilio";
-import { getSlotsForCoachDow, COACH_LABELS, COACH_SLUGS } from "@/lib/bookingSchedule";
+import { slotsFromSchedule, COACH_LABELS, COACH_SLUGS } from "@/lib/bookingSchedule";
+import { getCoachSchedule } from "@/lib/coaches";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     // Validate slot is in this coach's schedule
     const dow = new Date(slot_date + "T12:00:00").getDay();
-    const validSlots = getSlotsForCoachDow(coach, dow);
+    const validSlots = slotsFromSchedule(await getCoachSchedule(coach), dow);
     if (!validSlots.some((s) => s.start === slot_start && s.end === slot_end)) {
       return new Response("Invalid slot", { status: 400 });
     }
@@ -208,7 +209,7 @@ export async function POST(req: NextRequest) {
 
   // Validate the slot is in this coach's schedule
   const dow = new Date(slot_date + "T12:00:00").getDay();
-  const validSlots = getSlotsForCoachDow(coach, dow);
+  const validSlots = slotsFromSchedule(await getCoachSchedule(coach), dow);
   const isValid = validSlots.some((s) => s.start === slot_start && s.end === slot_end);
   if (!isValid) {
     return new Response("Invalid slot", { status: 400 });

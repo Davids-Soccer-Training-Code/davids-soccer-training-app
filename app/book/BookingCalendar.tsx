@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Unlock } from "lucide-react";
-import { getSlotsForCoachDow, COACH_LABELS, COACH_SLUGS, type SlotDef } from "@/lib/bookingSchedule";
+import { slotsFromSchedule, COACH_LABELS, COACH_SLUGS, type CoachSchedule, type SlotDef } from "@/lib/bookingSchedule";
 import { accentFor, COACH_ACCENT } from "@/lib/coachTheme";
 
 // ── Slot generation ────────────────────────────────────────────────────────────
@@ -24,7 +24,11 @@ function coachesFor(coach: string): string[] {
   return coach === "all" ? [...COACH_SLUGS] : [coach];
 }
 
-function generateDays(coach: string, weeks = 6): DaySlots[] {
+function generateDays(
+  coach: string,
+  schedules: Record<string, CoachSchedule>,
+  weeks = 6
+): DaySlots[] {
   const coaches = coachesFor(coach);
   const days: DaySlots[] = [];
   const today = new Date();
@@ -34,7 +38,7 @@ function generateDays(coach: string, weeks = 6): DaySlots[] {
     d.setDate(d.getDate() + i);
     const slots: CoachSlot[] = [];
     for (const c of coaches) {
-      for (const s of getSlotsForCoachDow(c, d.getDay())) {
+      for (const s of slotsFromSchedule(schedules[c], d.getDay())) {
         slots.push({ ...s, coach: c });
       }
     }
@@ -79,9 +83,11 @@ const COACH_LABEL = COACH_LABELS;
 export default function BookingCalendar({
   isAdmin = false,
   coach = "david",
+  schedules,
 }: {
   isAdmin?: boolean;
   coach?: string;
+  schedules: Record<string, CoachSchedule>;
 }) {
   const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
   const [adminBlocked, setAdminBlocked] = useState<AdminBlocked[]>([]);
@@ -135,7 +141,7 @@ export default function BookingCalendar({
   }
 
   const isAll = coach === "all";
-  const days = useMemo(() => generateDays(coach, 6), [coach]);
+  const days = useMemo(() => generateDays(coach, schedules, 6), [coach, schedules]);
 
   // Annotate each (visible) day with a month/week header to render before it.
   // Weeks are real calendar weeks (Sunday-start), and months are separated

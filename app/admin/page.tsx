@@ -39,6 +39,11 @@ const sections = [
     description: "Manage slot-specific session booking requests from the public calendar.",
     href: "/admin/booking-requests",
   },
+  {
+    title: "Coach Profiles",
+    description: "Edit each coach's booking availability and bio shown on the public calendar.",
+    href: "/admin/coaches",
+  },
 ];
 
 export default function AdminPage() {

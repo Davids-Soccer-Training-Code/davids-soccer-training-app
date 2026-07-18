@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { parseCoachParam, COACH_LABELS } from "@/lib/bookingSchedule";
+import { getCoachProfiles } from "@/lib/coaches";
 import BookingSection from "./BookingSection";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ export default async function BookPage({
   // ?coach=david | simon | simpson | all selects the coach tab (defaults to "all").
   const coachParam = (await searchParams).coach;
   const initialCoach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
+
+  // Per-coach schedules and bios come from crm_staff (editable in /admin/coaches).
+  const coaches = await getCoachProfiles();
   return (
     <div className="min-h-screen bg-emerald-50">
       <header className="bg-linear-to-r from-emerald-600 to-emerald-700">
@@ -83,7 +87,7 @@ export default async function BookPage({
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <BookingSection isAdmin={isAdmin} initialCoach={initialCoach} />
+        <BookingSection isAdmin={isAdmin} initialCoach={initialCoach} coaches={coaches} />
       </main>
     </div>
   );

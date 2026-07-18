@@ -1,88 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import BookingCalendar from "./BookingCalendar";
 import {
   COACH_LABELS,
   COACH_SLUGS,
+  scheduleToHoursLines,
+  type CoachProfile,
   type CoachSelection,
   type CoachSlug,
 } from "@/lib/bookingSchedule";
 import { COACH_ACCENT } from "@/lib/coachTheme";
-
-type HoursLine = { days: string; time: string };
-type CoachMeta = { hours: HoursLine[]; bio?: ReactNode };
-
-// Per-coach content for the booking page. Slots/validation live in
-// lib/bookingSchedule.ts — this is just the human-facing copy.
-const COACH_META: Record<CoachSlug, CoachMeta> = {
-  david: {
-    hours: [
-      { days: "Mon – Fri", time: "8:00 – 11:00 AM & 5:00 – 8:00 PM" },
-      { days: "Saturday", time: "5:00 – 8:00 PM" },
-      { days: "Sunday", time: "8:00 AM – 11:00 AM" },
-    ],
-  },
-  simon: {
-    hours: [
-      { days: "Mon – Fri", time: "8:00 – 11:00 AM" },
-      { days: "Tue & Wed evenings", time: "5:00 – 8:00 PM" },
-    ],
-    bio: (
-      <>
-        <h2 className="text-lg font-semibold text-gray-900">Meet Coach Simon</h2>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed text-gray-700">
-          <p>
-            Coach Simon is a soccer coach from{" "}
-            <span className="font-semibold text-gray-900">Kenya</span> who played his way to
-            the <span className="font-semibold text-gray-900">semi-pro</span> level before
-            moving to America to coach.
-          </p>
-          <p>
-            He holds a coaching certificate from the{" "}
-            <span className="font-semibold text-gray-900">KNVB</span> — the Royal Dutch Football
-            Association — bringing a global perspective to player development.
-          </p>
-          <p>
-            For the past <span className="font-semibold text-gray-900">3 months</span>{" "}he&apos;s
-            been working directly with Coach David, learning his technical coaching expertise so
-            every session stays true to the David&apos;s Soccer Training standard.
-          </p>
-        </div>
-      </>
-    ),
-  },
-  simpson: {
-    hours: [
-      { days: "Mon – Sat", time: "8:00 – 11:00 AM" },
-      { days: "Mon, Tue, Thu & Sat", time: "5:00 – 8:00 PM" },
-    ],
-    bio: (
-      <>
-        <h2 className="text-lg font-semibold text-gray-900">Meet Coach Simpson</h2>
-        <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-violet-700">
-          Head Coach
-        </p>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed text-gray-700">
-          <p>
-            Coach Simpson is a lifelong soccer player with experience competing in both the{" "}
-            <span className="font-semibold text-gray-900">United States</span> and{" "}
-            <span className="font-semibold text-gray-900">Germany</span>.
-          </p>
-          <p>
-            His passion is helping players build confidence, sharpen their technical abilities,
-            and develop a deeper understanding of the game.
-          </p>
-          <p>
-            Coach Simpson brings energy, positivity, and attention to detail to every session,
-            creating an environment where players are challenged, encouraged, and inspired to
-            reach their full potential.
-          </p>
-        </div>
-      </>
-    ),
-  },
-};
 
 // Toggle order: "All" first, then each coach in display order.
 const TOGGLE: { value: CoachSelection; label: string }[] = [
@@ -90,12 +18,38 @@ const TOGGLE: { value: CoachSelection; label: string }[] = [
   ...COACH_SLUGS.map((slug) => ({ value: slug, label: COACH_LABELS[slug] })),
 ];
 
+// Render a coach's bio (crm_staff.description) — newline-separated paragraphs.
+function CoachBio({ label, profile }: { label: string; profile: CoachProfile }) {
+  const paragraphs = (profile.bio ?? "")
+    .split(/\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const accentText = COACH_ACCENT[profile.slug]?.tagText ?? "text-emerald-700";
+  return (
+    <>
+      <h2 className="text-lg font-semibold text-gray-900">Meet {label}</h2>
+      {profile.role && (
+        <p className={`mt-1 text-xs font-semibold uppercase tracking-widest ${accentText}`}>
+          {profile.role}
+        </p>
+      )}
+      <div className="mt-3 space-y-3 text-sm leading-relaxed text-gray-700">
+        {paragraphs.map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function BookingSection({
   isAdmin = false,
   initialCoach = "all",
+  coaches,
 }: {
   isAdmin?: boolean;
   initialCoach?: CoachSelection;
+  coaches: Record<CoachSlug, CoachProfile>;
 }) {
   const [coach, setCoach] = useState<CoachSelection>(initialCoach);
   const isAll = coach === "all";
@@ -114,6 +68,13 @@ export default function BookingSection({
   // Giant title that makes the selected coach unmistakable.
   const titleText = isAll ? "All Coaches" : selectedLabel;
   const titleColor = selectedAccent ? selectedAccent.tagText : "text-emerald-700";
+
+  const selectedHasBio = selected ? Boolean((coaches[selected].bio ?? "").trim()) : false;
+
+  // Schedules keyed by slug — handed to the calendar to generate slots.
+  const schedules = Object.fromEntries(
+    COACH_SLUGS.map((slug) => [slug, coaches[slug].schedule])
+  );
 
   // Switch coaches and mirror the choice in the URL (?coach=…) so it stays
   // shareable and the address bar reflects the current tab.
@@ -171,9 +132,9 @@ export default function BookingSection({
       )}
 
       {/* Meet Coach … — single-coach view with a bio */}
-      {selected && COACH_META[selected].bio && (
+      {selected && selectedHasBio && (
         <div className="mb-6 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
-          {COACH_META[selected].bio}
+          <CoachBio label={selectedLabel ?? ""} profile={coaches[selected]} />
         </div>
       )}
 
@@ -194,7 +155,8 @@ export default function BookingSection({
           {visibleCoaches.flatMap((slug) => {
             // Each coach's slots are accented only in the "All" view.
             const accent = isAll && COACH_ACCENT[slug] ? COACH_ACCENT[slug] : null;
-            return COACH_META[slug].hours.map((h, i) => (
+            const hours = scheduleToHoursLines(coaches[slug].schedule);
+            return hours.map((h, i) => (
               <div
                 key={`${slug}-${i}`}
                 className={
@@ -215,7 +177,7 @@ export default function BookingSection({
       </div>
 
       {/* Re-mount the calendar when the coach changes so its slots/fetch reset */}
-      <BookingCalendar key={coach} isAdmin={isAdmin} coach={coach} />
+      <BookingCalendar key={coach} isAdmin={isAdmin} coach={coach} schedules={schedules} />
     </div>
   );
 }
