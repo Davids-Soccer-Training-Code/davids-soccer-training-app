@@ -2,47 +2,89 @@
 // the /api/booking-requests route (server) so the visible slots and the
 // server-side validation can never drift apart.
 
-export type SlotDef = { start: string; end: string };
+export type SlotDef = { start: string; end: string }; // "HH:MM"
 
-// A coach's day is made of at most two fixed blocks. Which blocks are open on
-// which weekday is editable per coach (stored on crm_staff.booking_schedule),
-// but the block windows themselves are fixed.
-export type Block = "morning" | "evening";
+// A custom availability block: start/end time on the same day. Sessions are
+// always one hour, so a block must be a whole number of hours long (e.g.
+// 08:00–11:00 or 14:30–17:30). Slots then tile hourly from the start.
+export type TimeBlock = { start: string; end: string }; // "HH:MM"
 
-// A coach's weekly availability: for each weekday (0 = Sunday … 6 = Saturday),
-// the open blocks. Missing/empty means the coach is off that day.
-export type CoachSchedule = Record<string, Block[]>;
+// A day's availability: weekday (0 = Sunday … 6 = Saturday) → open blocks.
+export type DayBlocks = Record<string, TimeBlock[]>;
 
-const MORNING_FULL: SlotDef[] = [
-  { start: "08:00", end: "09:00" },
-  { start: "09:00", end: "10:00" },
-  { start: "10:00", end: "11:00" },
-];
+// One dated schedule period. `start`/`end` are inclusive "YYYY-MM-DD" bounds;
+// null means open-ended. Different periods let a coach run different hours for,
+// say, July vs. Aug–Dec. The first period (in list order) that contains a date
+// applies to that date.
+export type SchedulePeriod = { start: string | null; end: string | null; days: DayBlocks };
 
-const EVENING: SlotDef[] = [
-  { start: "17:00", end: "18:00" },
-  { start: "18:00", end: "19:00" },
-  { start: "19:00", end: "20:00" },
-];
+// A coach's full availability: an ordered list of dated periods.
+export type CoachSchedule = SchedulePeriod[];
 
-// Fixed slot windows for each block. Morning = 8–11 AM, Evening = 5–8 PM.
-const BLOCK_SLOTS: Record<Block, SlotDef[]> = {
-  morning: MORNING_FULL,
-  evening: EVENING,
-};
+// How far ahead the booking calendar shows, in months, when a coach hasn't set
+// their own horizon.
+export const DEFAULT_HORIZON_MONTHS = 2;
 
-export const BLOCK_ORDER: Block[] = ["morning", "evening"];
+// ── Time helpers ─────────────────────────────────────────────────────────────
 
-// Slots a coach offers on a given weekday, expanded from their schedule.
-export function slotsFromSchedule(
+function toMin(t: string): number {
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+}
+
+function toHHMM(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// A block is valid when it's non-empty and a whole number of hours long.
+export function isWholeHourBlock(block: TimeBlock): boolean {
+  const s = toMin(block.start);
+  const e = toMin(block.end);
+  return Number.isFinite(s) && Number.isFinite(e) && e > s && e <= 24 * 60 && (e - s) % 60 === 0;
+}
+
+// Tile a block into consecutive 1-hour slots.
+export function slotsInBlock(block: TimeBlock): SlotDef[] {
+  if (!isWholeHourBlock(block)) return [];
+  const out: SlotDef[] = [];
+  for (let m = toMin(block.start); m + 60 <= toMin(block.end); m += 60) {
+    out.push({ start: toHHMM(m), end: toHHMM(m + 60) });
+  }
+  return out;
+}
+
+// ── Period selection ─────────────────────────────────────────────────────────
+
+function dateInPeriod(p: SchedulePeriod, dateStr: string): boolean {
+  if (p.start && dateStr < p.start) return false;
+  if (p.end && dateStr > p.end) return false;
+  return true;
+}
+
+// The period that applies to a date — the first one (in list order) that
+// contains it, or null if none do.
+export function periodForDate(schedule: CoachSchedule, dateStr: string): SchedulePeriod | null {
+  for (const p of schedule) {
+    if (dateInPeriod(p, dateStr)) return p;
+  }
+  return null;
+}
+
+// Slots a coach offers on a specific date: pick the applicable period, expand
+// that weekday's blocks into hourly slots, sorted by start.
+export function slotsForDate(
   schedule: CoachSchedule | null | undefined,
+  dateStr: string,
   dow: number
 ): SlotDef[] {
-  const blocks = schedule?.[String(dow)] ?? [];
+  const period = periodForDate(schedule ?? [], dateStr);
+  if (!period) return [];
+  const blocks = period.days[String(dow)] ?? [];
   const out: SlotDef[] = [];
-  for (const b of BLOCK_ORDER) {
-    if (blocks.includes(b)) out.push(...BLOCK_SLOTS[b]);
-  }
+  for (const b of blocks) out.push(...slotsInBlock(b));
+  out.sort((a, b) => toMin(a.start) - toMin(b.start));
   return out;
 }
 
@@ -50,33 +92,41 @@ export function slotsFromSchedule(
 // The hours pills at the top of the booking page are generated from the same
 // schedule that drives the slots, so they can never drift.
 
-const BLOCK_TIME: Record<Block, string> = {
-  morning: "8:00 – 11:00 AM",
-  evening: "5:00 – 8:00 PM",
-};
-
 const DOW_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DOW_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 // Read the week Monday-first so ranges render as "Mon – Fri", with Sunday last.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-function blockKey(blocks: Block[]): string {
-  return BLOCK_ORDER.filter((b) => blocks.includes(b)).join("+");
+// "14:30" → "2:30 PM"
+export function fmtTime12(hhmm: string): string {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr);
+  const ampm = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${mStr} ${ampm}`;
 }
 
-function blockTimeLabel(blocks: Block[]): string {
-  return BLOCK_ORDER.filter((b) => blocks.includes(b))
-    .map((b) => BLOCK_TIME[b])
+function blocksTimeLabel(blocks: TimeBlock[]): string {
+  return [...blocks]
+    .sort((a, b) => toMin(a.start) - toMin(b.start))
+    .map((b) => `${fmtTime12(b.start)} – ${fmtTime12(b.end)}`)
     .join(" & ");
+}
+
+function blocksKey(blocks: TimeBlock[]): string {
+  return [...blocks]
+    .sort((a, b) => toMin(a.start) - toMin(b.start))
+    .map((b) => `${b.start}-${b.end}`)
+    .join(",");
 }
 
 export type HoursLine = { days: string; time: string };
 
-// Collapse a schedule into human-readable hours lines, grouping consecutive
-// days (Mon-first) that share the same open blocks.
-export function scheduleToHoursLines(schedule: CoachSchedule): HoursLine[] {
+// Collapse one period's weekly blocks into readable hours lines, grouping
+// consecutive days (Mon-first) that share the same blocks.
+export function periodHoursLines(period: SchedulePeriod): HoursLine[] {
   const lines: HoursLine[] = [];
-  const blocksFor = (dow: number) => schedule[String(dow)] ?? [];
+  const blocksFor = (dow: number) => period.days[String(dow)] ?? [];
   let i = 0;
   while (i < WEEK_ORDER.length) {
     const blocks = blocksFor(WEEK_ORDER[i]);
@@ -84,12 +134,12 @@ export function scheduleToHoursLines(schedule: CoachSchedule): HoursLine[] {
       i++;
       continue;
     }
-    const key = blockKey(blocks);
+    const key = blocksKey(blocks);
     let j = i;
     while (
       j + 1 < WEEK_ORDER.length &&
       blocksFor(WEEK_ORDER[j + 1]).length > 0 &&
-      blockKey(blocksFor(WEEK_ORDER[j + 1])) === key
+      blocksKey(blocksFor(WEEK_ORDER[j + 1])) === key
     ) {
       j++;
     }
@@ -102,10 +152,40 @@ export function scheduleToHoursLines(schedule: CoachSchedule): HoursLine[] {
         : len === 2
           ? `${DOW_ABBR[startDow]} & ${DOW_ABBR[endDow]}`
           : `${DOW_ABBR[startDow]} – ${DOW_ABBR[endDow]}`;
-    lines.push({ days, time: blockTimeLabel(blocks) });
+    lines.push({ days, time: blocksTimeLabel(blocks) });
     i = j + 1;
   }
   return lines;
+}
+
+// A period's hours plus a human label for its date range (null when the period
+// is fully open-ended — the common single-period case, which then reads exactly
+// like a plain weekly schedule).
+export type PeriodHours = { label: string | null; lines: HoursLine[] };
+
+function fmtDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function periodLabel(p: SchedulePeriod): string | null {
+  if (p.start && p.end) return `${fmtDate(p.start)} – ${fmtDate(p.end)}`;
+  if (p.start) return `From ${fmtDate(p.start)}`;
+  if (p.end) return `Through ${fmtDate(p.end)}`;
+  return null;
+}
+
+// Hours grouped by period, dropping periods entirely in the past (as of
+// `todayStr`) or with no availability.
+export function scheduleToPeriodHours(schedule: CoachSchedule, todayStr: string): PeriodHours[] {
+  const out: PeriodHours[] = [];
+  for (const p of schedule) {
+    if (p.end && p.end < todayStr) continue; // wholly past
+    const lines = periodHoursLines(p);
+    if (lines.length === 0) continue;
+    out.push({ label: periodLabel(p), lines });
+  }
+  return out;
 }
 
 // ── Coach identity ───────────────────────────────────────────────────────────
@@ -125,15 +205,24 @@ export type CoachSlug = (typeof COACH_SLUGS)[number];
 export type CoachSelection = "all" | CoachSlug;
 
 // Fallback schedules used only if a coach has no booking_schedule stored (e.g.
-// a brand-new coach row). These mirror what the live schedules were before they
-// became editable, so the booking page never renders empty.
-const M: Block[] = ["morning"];
-const E: Block[] = ["evening"];
-const ME: Block[] = ["morning", "evening"];
+// a brand-new coach row): a single open-ended period with the old fixed
+// Morning (8–11 AM) / Evening (5–8 PM) windows, so the page never renders empty.
+const MORNING: TimeBlock = { start: "08:00", end: "11:00" };
+const EVENING: TimeBlock = { start: "17:00", end: "20:00" };
+const openPeriod = (days: DayBlocks): CoachSchedule => [{ start: null, end: null, days }];
 export const DEFAULT_SCHEDULES: Record<CoachSlug, CoachSchedule> = {
-  david: { "0": M, "1": ME, "2": ME, "3": ME, "4": ME, "5": ME, "6": E },
-  simon: { "0": [], "1": M, "2": ME, "3": ME, "4": M, "5": M, "6": [] },
-  simpson: { "0": [], "1": ME, "2": ME, "3": M, "4": ME, "5": M, "6": ME },
+  david: openPeriod({
+    "0": [MORNING], "1": [MORNING, EVENING], "2": [MORNING, EVENING], "3": [MORNING, EVENING],
+    "4": [MORNING, EVENING], "5": [MORNING, EVENING], "6": [EVENING],
+  }),
+  simon: openPeriod({
+    "0": [], "1": [MORNING], "2": [MORNING, EVENING], "3": [MORNING, EVENING],
+    "4": [MORNING], "5": [MORNING], "6": [],
+  }),
+  simpson: openPeriod({
+    "0": [], "1": [MORNING, EVENING], "2": [MORNING, EVENING], "3": [MORNING],
+    "4": [MORNING, EVENING], "5": [MORNING], "6": [MORNING, EVENING],
+  }),
 };
 
 // A coach profile as the booking page and admin editor consume it. Plain data
@@ -143,6 +232,7 @@ export type CoachProfile = {
   bio: string | null;
   role: string | null;
   schedule: CoachSchedule;
+  horizonMonths: number;
 };
 
 // Legacy ?coach= slugs that have since been renamed, kept so links shared

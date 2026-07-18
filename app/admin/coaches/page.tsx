@@ -21,6 +21,7 @@ export default async function AdminCoachesPage() {
     role: profiles[slug].role,
     bio: profiles[slug].bio ?? "",
     schedule: profiles[slug].schedule,
+    horizonMonths: profiles[slug].horizonMonths,
   }));
 
   return (

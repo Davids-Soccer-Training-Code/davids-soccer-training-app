@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Unlock } from "lucide-react";
-import { slotsFromSchedule, COACH_LABELS, COACH_SLUGS, type CoachSchedule, type SlotDef } from "@/lib/bookingSchedule";
+import { slotsForDate, COACH_LABELS, COACH_SLUGS, type CoachSchedule, type SlotDef } from "@/lib/bookingSchedule";
 import { accentFor, COACH_ACCENT } from "@/lib/coachTheme";
 
 // ── Slot generation ────────────────────────────────────────────────────────────
@@ -27,24 +27,26 @@ function coachesFor(coach: string): string[] {
 function generateDays(
   coach: string,
   schedules: Record<string, CoachSchedule>,
-  weeks = 6
+  horizonMonths: number
 ): DaySlots[] {
   const coaches = coachesFor(coach);
   const days: DaySlots[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < weeks * 7; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
+  const end = new Date(today);
+  end.setMonth(end.getMonth() + horizonMonths);
+  for (const d = new Date(today); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = toDateStr(d);
+    const dow = d.getDay();
     const slots: CoachSlot[] = [];
     for (const c of coaches) {
-      for (const s of slotsFromSchedule(schedules[c], d.getDay())) {
+      for (const s of slotsForDate(schedules[c], dateStr, dow)) {
         slots.push({ ...s, coach: c });
       }
     }
     if (!slots.length) continue;
     days.push({
-      date: toDateStr(d),
+      date: dateStr,
       label: d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
       slots,
     });
@@ -84,10 +86,12 @@ export default function BookingCalendar({
   isAdmin = false,
   coach = "david",
   schedules,
+  horizonMonths,
 }: {
   isAdmin?: boolean;
   coach?: string;
   schedules: Record<string, CoachSchedule>;
+  horizonMonths: number;
 }) {
   const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
   const [adminBlocked, setAdminBlocked] = useState<AdminBlocked[]>([]);
@@ -141,7 +145,10 @@ export default function BookingCalendar({
   }
 
   const isAll = coach === "all";
-  const days = useMemo(() => generateDays(coach, schedules, 6), [coach, schedules]);
+  const days = useMemo(
+    () => generateDays(coach, schedules, horizonMonths),
+    [coach, schedules, horizonMonths]
+  );
 
   // Annotate each (visible) day with a month/week header to render before it.
   // Weeks are real calendar weeks (Sunday-start), and months are separated

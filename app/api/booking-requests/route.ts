@@ -2,8 +2,8 @@ import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { sendSmsViaTwilio } from "@/lib/twilio";
-import { slotsFromSchedule, COACH_LABELS, COACH_SLUGS } from "@/lib/bookingSchedule";
-import { getCoachSchedule } from "@/lib/coaches";
+import { slotsForDate, COACH_LABELS, COACH_SLUGS } from "@/lib/bookingSchedule";
+import { getCoachSchedule, getHorizonMonths } from "@/lib/coaches";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -66,13 +66,15 @@ export async function GET(req: NextRequest) {
   const all = coachParam === "all";
   const coach = normalizeCoach(coachParam);
 
+  // Window end = today + the coach's booking horizon (widest coach for "all").
+  const horizonMonths = await getHorizonMonths(all ? "all" : coach);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const sixWeeks = new Date(today);
-  sixWeeks.setDate(sixWeeks.getDate() + 42);
+  const windowEnd = new Date(today);
+  windowEnd.setMonth(windowEnd.getMonth() + horizonMonths);
 
   const todayStr = today.toISOString().slice(0, 10);
-  const endStr = sixWeeks.toISOString().slice(0, 10);
+  const endStr = windowEnd.toISOString().slice(0, 10);
 
   // Only pending requests (held while awaiting a decision) and admin blocks hold
   // a slot. Confirmed requests are intentionally excluded — once a request is
@@ -173,9 +175,9 @@ export async function POST(req: NextRequest) {
     if (!slot_start || typeof slot_start !== "string") return new Response("slot_start required", { status: 400 });
     if (!slot_end || typeof slot_end !== "string") return new Response("slot_end required", { status: 400 });
 
-    // Validate slot is in this coach's schedule
+    // Validate slot is in this coach's schedule for that date
     const dow = new Date(slot_date + "T12:00:00").getDay();
-    const validSlots = slotsFromSchedule(await getCoachSchedule(coach), dow);
+    const validSlots = slotsForDate(await getCoachSchedule(coach), slot_date, dow);
     if (!validSlots.some((s) => s.start === slot_start && s.end === slot_end)) {
       return new Response("Invalid slot", { status: 400 });
     }
@@ -207,9 +209,9 @@ export async function POST(req: NextRequest) {
     return new Response("slot_end is required", { status: 400 });
   }
 
-  // Validate the slot is in this coach's schedule
+  // Validate the slot is in this coach's schedule for that date
   const dow = new Date(slot_date + "T12:00:00").getDay();
-  const validSlots = slotsFromSchedule(await getCoachSchedule(coach), dow);
+  const validSlots = slotsForDate(await getCoachSchedule(coach), slot_date, dow);
   const isValid = validSlots.some((s) => s.start === slot_start && s.end === slot_end);
   if (!isValid) {
     return new Response("Invalid slot", { status: 400 });

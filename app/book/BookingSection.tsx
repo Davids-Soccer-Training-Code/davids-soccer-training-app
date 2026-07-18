@@ -5,12 +5,18 @@ import BookingCalendar from "./BookingCalendar";
 import {
   COACH_LABELS,
   COACH_SLUGS,
-  scheduleToHoursLines,
+  scheduleToPeriodHours,
   type CoachProfile,
   type CoachSelection,
   type CoachSlug,
 } from "@/lib/bookingSchedule";
 import { COACH_ACCENT } from "@/lib/coachTheme";
+
+// Local YYYY-MM-DD for "today" (used to hide fully-past schedule periods).
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // Toggle order: "All" first, then each coach in display order.
 const TOGGLE: { value: CoachSelection; label: string }[] = [
@@ -75,6 +81,14 @@ export default function BookingSection({
   const schedules = Object.fromEntries(
     COACH_SLUGS.map((slug) => [slug, coaches[slug].schedule])
   );
+
+  // How far ahead the calendar shows: this coach's horizon, or the widest in
+  // the "All" view.
+  const horizonMonths = isAll
+    ? Math.max(...COACH_SLUGS.map((s) => coaches[s].horizonMonths))
+    : coaches[coach as CoachSlug].horizonMonths;
+
+  const today = todayStr();
 
   // Switch coaches and mirror the choice in the URL (?coach=…) so it stays
   // shareable and the address bar reflects the current tab.
@@ -151,33 +165,63 @@ export default function BookingSection({
           text you to confirm within 24 hours.
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-4">
-          {visibleCoaches.flatMap((slug) => {
+        <div className="mt-4 flex flex-col gap-4">
+          {visibleCoaches.map((slug) => {
             // Each coach's slots are accented only in the "All" view.
             const accent = isAll && COACH_ACCENT[slug] ? COACH_ACCENT[slug] : null;
-            const hours = scheduleToHoursLines(coaches[slug].schedule);
-            return hours.map((h, i) => (
-              <div
-                key={`${slug}-${i}`}
-                className={
-                  accent ? accent.hoursCard : "rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
-                }
-              >
-                {isAll && i === 0 && (
-                  <span className={accent ? accent.hoursCoachName : "mr-2 font-semibold text-emerald-700"}>
+            const periods = scheduleToPeriodHours(coaches[slug].schedule, today);
+            if (periods.length === 0) return null;
+            return (
+              <div key={slug}>
+                {isAll && (
+                  <div
+                    className={
+                      accent ? `mb-1 text-sm font-semibold ${accent.tagText}` : "mb-1 text-sm font-semibold text-emerald-700"
+                    }
+                  >
                     {COACH_LABELS[slug]}
-                  </span>
+                  </div>
                 )}
-                <span className="font-semibold text-gray-800">{h.days}</span>
-                <span className="ml-2 text-gray-600">{h.time}</span>
+                <div className="flex flex-col gap-2">
+                  {periods.map((p, pi) => (
+                    <div key={pi}>
+                      {p.label && (
+                        <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                          {p.label}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {p.lines.map((h, i) => (
+                          <div
+                            key={i}
+                            className={
+                              accent
+                                ? accent.hoursCard
+                                : "rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
+                            }
+                          >
+                            <span className="font-semibold text-gray-800">{h.days}</span>
+                            <span className="ml-2 text-gray-600">{h.time}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ));
+            );
           })}
         </div>
       </div>
 
       {/* Re-mount the calendar when the coach changes so its slots/fetch reset */}
-      <BookingCalendar key={coach} isAdmin={isAdmin} coach={coach} schedules={schedules} />
+      <BookingCalendar
+        key={coach}
+        isAdmin={isAdmin}
+        coach={coach}
+        schedules={schedules}
+        horizonMonths={horizonMonths}
+      />
     </div>
   );
 }
