@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { sendSmsViaTwilio } from "@/lib/twilio";
-import { getSlotsForCoachDow, COACH_LABELS } from "@/lib/bookingSchedule";
+import { getSlotsForCoachDow, COACH_LABELS, COACH_SLUGS } from "@/lib/bookingSchedule";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,10 +14,23 @@ function normalizeCoach(value: unknown): string {
   return c in COACH_LABELS ? c : "david";
 }
 
-// CRM sessions carry a free-text title. A title that names another coach — e.g.
-// "Coach Simon" (optionally with trailing notes) — means the session belongs to
-// that coach's calendar. Untitled sessions, or anything that doesn't name a
-// non-David coach, belong to Coach David.
+// A CRM session's coach is its assigned staff member (coach_id → crm_staff).
+// Match the staff member's name against the known coach slugs, e.g.
+// "Simon Njuguna" → simon, "MarcAnthony Simpson" → simpson, "David Fales" →
+// david. Returns null when no coach is assigned so callers can fall back to the
+// legacy title heuristic.
+function coachFromStaffName(name: string | null): string | null {
+  const n = (name ?? "").trim().toLowerCase();
+  if (!n) return null;
+  for (const slug of COACH_SLUGS) {
+    if (slug !== "david" && n.includes(slug)) return slug;
+  }
+  return "david";
+}
+
+// Legacy fallback for older CRM sessions that have no coach_id: a free-text
+// title that names another coach — e.g. "Coach Simon" (optionally with trailing
+// notes) — means the session belongs to that coach. Everything else is David.
 function coachFromCrmTitle(title: string | null): string {
   const t = (title ?? "").trim().toLowerCase();
   if (!t) return "david";
@@ -26,6 +39,12 @@ function coachFromCrmTitle(title: string | null): string {
     if (t === label.toLowerCase() || t.startsWith(label.toLowerCase())) return key;
   }
   return "david";
+}
+
+// The coach a CRM session belongs to: the assigned staff member wins; fall back
+// to the title only when no coach_id is set.
+function coachForCrmSession(coachName: string | null, title: string | null): string {
+  return coachFromStaffName(coachName) ?? coachFromCrmTitle(title);
 }
 
 export type Slot = {
@@ -88,36 +107,42 @@ export async function GET(req: NextRequest) {
   // to Arizona time (America/Phoenix = UTC-7, no daylight saving ever).
   // CRM sessions store only a start; treat each as a standard 1-hour session so
   // the calendar can block every slot the session overlaps (e.g. a 6:30 session
-  // covers both the 6:00 and 7:00 slots). The title decides which coach the
-  // session belongs to (see coachFromCrmTitle).
+  // covers both the 6:00 and 7:00 slots). The assigned staff member (coach_id →
+  // crm_staff) decides which coach the session belongs to, falling back to the
+  // title for older sessions with no coach_id (see coachForCrmSession).
   const crmRegular = (await sql`
     SELECT
-      ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
-      to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
-      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end",
-      title
-    FROM crm_sessions
-    WHERE cancelled IS NOT TRUE
-      AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
-      AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string; end: string; title: string | null }>;
+      ((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
+      to_char((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
+      to_char(((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end",
+      s.title,
+      st.name AS coach_name
+    FROM crm_sessions s
+    LEFT JOIN crm_staff st ON st.id = s.coach_id
+    WHERE s.cancelled IS NOT TRUE
+      AND ((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
+      AND ((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
+  `) as unknown as Array<{ date: string; start: string; end: string; title: string | null; coach_name: string | null }>;
 
   const crmFirst = (await sql`
     SELECT
-      ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
-      to_char((session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
-      to_char(((session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end",
-      title
-    FROM crm_first_sessions
-    WHERE cancelled IS NOT TRUE
-      AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
-      AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
-  `) as unknown as Array<{ date: string; start: string; end: string; title: string | null }>;
+      ((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date::text AS date,
+      to_char((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
+      to_char(((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix') + interval '1 hour', 'HH24:MI') AS "end",
+      s.title,
+      st.name AS coach_name
+    FROM crm_first_sessions s
+    LEFT JOIN crm_staff st ON st.id = s.coach_id
+    WHERE s.cancelled IS NOT TRUE
+      AND ((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${todayStr}::date
+      AND ((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date <= ${endStr}::date
+  `) as unknown as Array<{ date: string; start: string; end: string; title: string | null; coach_name: string | null }>;
 
-  // Route each CRM session to its coach by title, then keep only the ones this
-  // request cares about — every coach ("all") or the single requested coach.
+  // Route each CRM session to its coach (assigned staff, else title), then keep
+  // only the ones this request cares about — every coach ("all") or the single
+  // requested coach.
   const crmSlots = [...crmRegular, ...crmFirst]
-    .map(({ title, ...s }) => ({ ...s, coach: coachFromCrmTitle(title) }))
+    .map(({ title, coach_name, ...s }) => ({ ...s, coach: coachForCrmSession(coach_name, title) }))
     .filter((s) => all || s.coach === coach);
 
   return Response.json({
