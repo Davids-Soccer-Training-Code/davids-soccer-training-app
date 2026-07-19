@@ -127,6 +127,16 @@ export async function getCoachSchedule(slug: string): Promise<CoachSchedule> {
   return scheduleOrDefault(key, bySlug.get(key)?.booking_schedule);
 }
 
+// A coach's contact phone from the staff table (any format — the Twilio sender
+// normalizes it). Null when the coach has no number on file.
+export async function getCoachPhone(slug: string): Promise<string | null> {
+  const rows = (await sql`
+    SELECT phone FROM crm_staff WHERE slug = ${slug} LIMIT 1
+  `) as unknown as Array<{ phone: string | null }>;
+  const phone = rows[0]?.phone?.trim();
+  return phone ? phone : null;
+}
+
 // How many months ahead to render/hold, for one coach or the widest across all
 // ("all" view). Drives the calendar range and the booked-slots query window.
 export async function getHorizonMonths(coach: string): Promise<number> {

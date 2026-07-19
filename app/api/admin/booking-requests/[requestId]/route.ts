@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { sql } from "@/db";
 import { assertAdmin } from "@/lib/adminAuth";
 import { sendSmsViaTwilio } from "@/lib/twilio";
+import { COACH_LABELS } from "@/lib/bookingSchedule";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,14 @@ export async function PATCH(
     UPDATE session_booking_requests
     SET status = ${status}, updated_at = now()
     WHERE id = ${requestId}
-    RETURNING id, parent_name, player_name, phone, slot_date::text AS slot_date,
+    RETURNING id, parent_name, player_name, phone, coach, slot_date::text AS slot_date,
               to_char(slot_start, 'HH24:MI') AS slot_start
   `) as unknown as Array<{
     id: string;
     parent_name: string;
     player_name: string;
     phone: string | null;
+    coach: string | null;
     slot_date: string;
     slot_start: string;
   }>;
@@ -52,8 +54,9 @@ export async function PATCH(
       month: "short",
       day: "numeric",
     });
+    const coachLabel = COACH_LABELS[row.coach ?? "david"] ?? "Coach David";
     await sendSmsViaTwilio(
-      `✅ Hi ${row.parent_name}, your session for ${row.player_name} on ${slotDateLabel} at ${fmtTime(row.slot_start)} is confirmed. See you then! — Coach David`,
+      `✅ Hi ${row.parent_name}, your session for ${row.player_name} with ${coachLabel} on ${slotDateLabel} at ${fmtTime(row.slot_start)} is confirmed. See you then! — ${coachLabel}`,
       { to: row.phone }
     ).catch(() => {});
   }

@@ -3,7 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { sql } from "@/db";
 import { sendSmsViaTwilio } from "@/lib/twilio";
 import { slotsForDate, COACH_LABELS, COACH_SLUGS } from "@/lib/bookingSchedule";
-import { getCoachSchedule, getHorizonMonths } from "@/lib/coaches";
+import { getCoachSchedule, getHorizonMonths, getCoachPhone } from "@/lib/coaches";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -281,6 +281,24 @@ export async function POST(req: NextRequest) {
     `Review: ${baseUrl}/admin/booking-requests`,
     { to: "+17206122979" }
   ).catch(() => {});
+
+  // Also text the assigned coach (Simon/Simpson) — no link, just the details.
+  // David is the owner and already gets the message above.
+  if (coach !== "david") {
+    const coachPhone = await getCoachPhone(coach);
+    if (coachPhone) {
+      const notesStr = typeof notes === "string" ? notes.trim() : "";
+      await sendSmsViaTwilio(
+        `📅 New session request for you (${COACH_LABELS[coach]})!\n` +
+        `${slotDateLabel} ${fmt(slot_start)} – ${fmt(slot_end)}\n` +
+        `Player: ${player_name.trim()}\n` +
+        `Parent: ${parent_name.trim()}\n` +
+        `Phone: ${phone ?? "—"}  Email: ${email ?? "—"}` +
+        (notesStr ? `\nDetails: ${notesStr}` : ""),
+        { to: coachPhone }
+      ).catch(() => {});
+    }
+  }
 
   return Response.json({ request }, { status: 201 });
 }
