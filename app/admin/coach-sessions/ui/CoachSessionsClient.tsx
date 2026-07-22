@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { fmtTime12, type CoachSlug } from "@/lib/bookingSchedule";
-import { COACH_ACCENT } from "@/lib/coachTheme";
+import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
 
 export type CoachSession = {
   date: string; // YYYY-MM-DD (Arizona)
@@ -71,36 +71,11 @@ export function CoachSessionsClient({ coaches }: { coaches: CoachTab[] }) {
 
   return (
     <div>
-      {/* Coach tabs */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        {coaches.map((c) => {
-          const isActive = c.slug === active;
-          const accent = COACH_ACCENT[c.slug];
-          const activeClass = accent
-            ? `${accent.publicBtnSelected}`
-            : "rounded-xl border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow";
-          const idleClass = "rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-emerald-300";
-          return (
-            <button
-              key={c.slug}
-              type="button"
-              onClick={() => setActive(c.slug)}
-              className={isActive ? activeClass : idleClass}
-            >
-              {c.label}
-              <span
-                className={
-                  isActive
-                    ? "ml-2 rounded-full bg-white/25 px-2 py-0.5 text-xs"
-                    : "ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
-                }
-              >
-                {c.sessions.length}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <CoachSwitcher
+        items={coaches.map((c) => ({ slug: c.slug, label: c.label, count: c.sessions.length }))}
+        active={active}
+        onChange={setActive}
+      />
 
       {/* Selected coach's upcoming sessions */}
       {current && current.sessions.length > 0 ? (

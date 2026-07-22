@@ -197,10 +197,11 @@ export const COACH_LABELS: Record<string, string> = {
   david: "Coach David",
   simon: "Coach Simon",
   simpson: "Coach Simpson",
+  girish: "Coach Girish",
 };
 
 // Display/toggle order. "all" is layered on top of this in the UI.
-export const COACH_SLUGS = ["david", "simon", "simpson"] as const;
+export const COACH_SLUGS = ["david", "simon", "simpson", "girish"] as const;
 export type CoachSlug = (typeof COACH_SLUGS)[number];
 export type CoachSelection = "all" | CoachSlug;
 
@@ -209,6 +210,9 @@ export type CoachSelection = "all" | CoachSlug;
 // Morning (8–11 AM) / Evening (5–8 PM) windows, so the page never renders empty.
 const MORNING: TimeBlock = { start: "08:00", end: "11:00" };
 const EVENING: TimeBlock = { start: "17:00", end: "20:00" };
+// Coach Girish runs a shorter weekend morning and an earlier (4–7 PM) evening.
+const WEEKEND_MORNING: TimeBlock = { start: "08:00", end: "10:00" };
+const EARLY_EVENING: TimeBlock = { start: "16:00", end: "19:00" };
 const openPeriod = (days: DayBlocks): CoachSchedule => [{ start: null, end: null, days }];
 export const DEFAULT_SCHEDULES: Record<CoachSlug, CoachSchedule> = {
   david: openPeriod({
@@ -222,6 +226,10 @@ export const DEFAULT_SCHEDULES: Record<CoachSlug, CoachSchedule> = {
   simpson: openPeriod({
     "0": [], "1": [MORNING, EVENING], "2": [MORNING, EVENING], "3": [MORNING],
     "4": [MORNING, EVENING], "5": [MORNING], "6": [MORNING, EVENING],
+  }),
+  girish: openPeriod({
+    "0": [WEEKEND_MORNING], "1": [MORNING, EARLY_EVENING], "2": [MORNING, EARLY_EVENING],
+    "3": [MORNING, EARLY_EVENING], "4": [MORNING, EARLY_EVENING], "5": [MORNING], "6": [WEEKEND_MORNING],
   }),
 };
 

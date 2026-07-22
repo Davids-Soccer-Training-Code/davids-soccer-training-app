@@ -10,6 +10,7 @@ import {
   type DayBlocks,
   type SchedulePeriod,
 } from "@/lib/bookingSchedule";
+import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
 
 export type EditableCoach = {
   slug: CoachSlug;
@@ -343,10 +344,22 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
 }
 
 export function CoachProfilesClient({ initialCoaches }: { initialCoaches: EditableCoach[] }) {
+  const [active, setActive] = useState<CoachSlug>(initialCoaches[0]?.slug ?? "david");
+
   return (
-    <div className="space-y-6">
+    <div>
+      <CoachSwitcher
+        items={initialCoaches.map((c) => ({ slug: c.slug, label: c.label }))}
+        active={active}
+        onChange={setActive}
+      />
+
+      {/* Every card stays mounted so unsaved edits survive switching coaches;
+          only the selected one is shown. */}
       {initialCoaches.map((c) => (
-        <CoachCard key={c.slug} initial={c} />
+        <div key={c.slug} className={c.slug === active ? "" : "hidden"}>
+          <CoachCard initial={c} />
+        </div>
       ))}
     </div>
   );

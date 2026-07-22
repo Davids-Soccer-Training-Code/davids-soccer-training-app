@@ -53,6 +53,22 @@ export const COACH_ACCENT: Record<string, CoachAccent> = {
     formText: "mt-0.5 text-sm font-medium text-violet-700",
     banner: "mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900",
   },
+  girish: {
+    tag: "(Coach Girish)",
+    tagText: "text-rose-700",
+    publicBtn:
+      "rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100",
+    publicBtnSelected:
+      "rounded-xl border border-rose-600 bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow",
+    adminWrap: "flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5",
+    adminBtn: "text-xs font-semibold text-rose-700 hover:underline",
+    adminBtnSelected: "text-xs font-semibold text-rose-900 underline",
+    hoursCard: "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm",
+    hoursCoachName: "mr-2 font-semibold text-rose-700",
+    badge: "rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700",
+    formText: "mt-0.5 text-sm font-medium text-rose-700",
+    banner: "mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900",
+  },
 };
 
 // Accent for a coach in a given view. Only non-David coaches, and only in the
