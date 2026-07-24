@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { sql } from "@/db";
 import { assertAdmin } from "@/lib/adminAuth";
 import { COACH_SLUGS } from "@/lib/bookingSchedule";
-import { sanitizeSchedule, sanitizeHorizon } from "@/lib/coaches";
+import { sanitizeSchedule, sanitizeHorizon, sanitizeLocations } from "@/lib/coaches";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,7 @@ export async function PATCH(req: NextRequest) {
     role?: unknown;
     horizonMonths?: unknown;
     booking_schedule?: unknown;
+    booking_locations?: unknown;
   } | null;
   if (!body) return new Response("Invalid JSON", { status: 400 });
 
@@ -33,6 +34,7 @@ export async function PATCH(req: NextRequest) {
   const role = typeof body.role === "string" ? body.role.trim() || null : null;
   const horizonMonths = sanitizeHorizon(body.horizonMonths);
   const schedule = sanitizeSchedule(body.booking_schedule);
+  const locations = sanitizeLocations(body.booking_locations);
 
   const rows = (await sql`
     UPDATE crm_staff
@@ -40,15 +42,17 @@ export async function PATCH(req: NextRequest) {
         booking_role = ${role},
         booking_horizon_months = ${horizonMonths},
         booking_schedule = ${JSON.stringify(schedule)}::jsonb,
+        booking_locations = ${JSON.stringify(locations)}::jsonb,
         updated_at = now()
     WHERE slug = ${slug}
-    RETURNING slug, booking_bio, booking_role, booking_horizon_months, booking_schedule
+    RETURNING slug, booking_bio, booking_role, booking_horizon_months, booking_schedule, booking_locations
   `) as unknown as Array<{
     slug: string;
     booking_bio: string | null;
     booking_role: string | null;
     booking_horizon_months: number;
     booking_schedule: unknown;
+    booking_locations: unknown;
   }>;
 
   if (rows.length === 0) return new Response("Coach not found", { status: 404 });

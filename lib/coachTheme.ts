@@ -69,6 +69,40 @@ export const COACH_ACCENT: Record<string, CoachAccent> = {
     formText: "mt-0.5 text-sm font-medium text-rose-700",
     banner: "mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900",
   },
+  george: {
+    tag: "(Coach George)",
+    tagText: "text-orange-700",
+    publicBtn:
+      "rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:border-orange-400 hover:bg-orange-100",
+    publicBtnSelected:
+      "rounded-xl border border-orange-600 bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow",
+    adminWrap: "flex items-center gap-1 rounded-xl border border-orange-200 bg-orange-50 px-2 py-1.5",
+    adminBtn: "text-xs font-semibold text-orange-700 hover:underline",
+    adminBtnSelected: "text-xs font-semibold text-orange-900 underline",
+    hoursCard: "rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm",
+    hoursCoachName: "mr-2 font-semibold text-orange-700",
+    badge: "rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700",
+    formText: "mt-0.5 text-sm font-medium text-orange-700",
+    banner: "mb-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900",
+  },
+  tyrone: {
+    tag: "(Coach Tyrone)",
+    // Yellow needs dark text to stay readable: gold text on white, dark ink on
+    // the bright-yellow selected buttons.
+    tagText: "text-yellow-700",
+    publicBtn:
+      "rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-800 transition hover:border-yellow-400 hover:bg-yellow-100",
+    publicBtnSelected:
+      "rounded-xl border border-yellow-500 bg-yellow-400 px-3 py-1.5 text-xs font-semibold text-yellow-950 shadow",
+    adminWrap: "flex items-center gap-1 rounded-xl border border-yellow-200 bg-yellow-50 px-2 py-1.5",
+    adminBtn: "text-xs font-semibold text-yellow-800 hover:underline",
+    adminBtnSelected: "text-xs font-semibold text-yellow-900 underline",
+    hoursCard: "rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm",
+    hoursCoachName: "mr-2 font-semibold text-yellow-700",
+    badge: "rounded-full border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-xs font-semibold text-yellow-800",
+    formText: "mt-0.5 text-sm font-medium text-yellow-700",
+    banner: "mb-4 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900",
+  },
 };
 
 // Accent for a coach in a given view. Only non-David coaches, and only in the

@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Star, Trash2 } from "lucide-react";
 import {
   isWholeHourBlock,
   scheduleToPeriodHours,
+  type CoachLocation,
   type CoachSchedule,
   type CoachSlug,
   type DayBlocks,
@@ -19,7 +20,11 @@ export type EditableCoach = {
   bio: string;
   schedule: CoachSchedule;
   horizonMonths: number;
+  locations: CoachLocation[];
 };
+
+// A location with a stable client id for React keys.
+type UiLocation = CoachLocation & { uid: string };
 
 // Week rendered Monday-first, Sunday last.
 const WEEK: { dow: number; label: string }[] = [
@@ -60,8 +65,33 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
   const [horizon, setHorizon] = useState(String(initial.horizonMonths));
   const [role, setRole] = useState(initial.role ?? "");
   const [bio, setBio] = useState(initial.bio);
+  const [locations, setLocations] = useState<UiLocation[]>(() =>
+    initial.locations.map((l) => ({ ...l, uid: crypto.randomUUID() }))
+  );
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  // ── Location mutators ──
+  function addLocation() {
+    setLocations((prev) => [
+      ...prev,
+      { uid: crypto.randomUUID(), city: "", address: "", preferred: prev.length === 0 },
+    ]);
+  }
+  function removeLocation(uid: string) {
+    setLocations((prev) => {
+      const next = prev.filter((l) => l.uid !== uid);
+      // If we removed the preferred one, promote the first remaining location.
+      if (next.length > 0 && !next.some((l) => l.preferred)) next[0].preferred = true;
+      return [...next];
+    });
+  }
+  function setLocationField(uid: string, field: "city" | "address", value: string) {
+    setLocations((prev) => prev.map((l) => (l.uid === uid ? { ...l, [field]: value } : l)));
+  }
+  function setPreferred(uid: string) {
+    setLocations((prev) => prev.map((l) => ({ ...l, preferred: l.uid === uid })));
+  }
 
   // Any invalid (non-whole-hour) block blocks saving.
   const hasErrors = useMemo(
@@ -128,6 +158,11 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
           role,
           horizonMonths: Number(horizon),
           booking_schedule: fromUi(periods),
+          booking_locations: locations.map(({ city, address, preferred }) => ({
+            city,
+            address,
+            preferred,
+          })),
         }),
       });
       if (!res.ok) {
@@ -322,6 +357,65 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
           placeholder="A short bio shown on this coach's booking tab. One blank line between paragraphs."
           className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
         />
+      </div>
+
+      {/* Training locations */}
+      <div className="mb-5">
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-500">
+          Training locations{" "}
+          <span className="font-normal normal-case text-gray-400">(star the preferred one)</span>
+        </label>
+        <div className="space-y-2">
+          {locations.map((l) => (
+            <div
+              key={l.uid}
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 p-2"
+            >
+              <button
+                type="button"
+                onClick={() => setPreferred(l.uid)}
+                title={l.preferred ? "Preferred location" : "Make preferred"}
+                className={
+                  l.preferred
+                    ? "rounded-lg p-1.5 text-amber-500"
+                    : "rounded-lg p-1.5 text-gray-300 hover:text-amber-400"
+                }
+              >
+                <Star className={l.preferred ? "h-4 w-4 fill-amber-400" : "h-4 w-4"} />
+              </button>
+              <input
+                value={l.city}
+                onChange={(e) => setLocationField(l.uid, "city", e.target.value)}
+                placeholder="City"
+                className="w-36 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              />
+              <input
+                value={l.address}
+                onChange={(e) => setLocationField(l.uid, "address", e.target.value)}
+                placeholder="Park / address (optional)"
+                className="min-w-40 flex-1 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              />
+              <button
+                type="button"
+                onClick={() => removeLocation(l.uid)}
+                title="Remove location"
+                className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {locations.length === 0 && (
+            <p className="text-xs italic text-gray-400">No locations yet.</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={addLocation}
+          className="mt-2 flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+        >
+          <Plus className="h-4 w-4" /> Add location
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

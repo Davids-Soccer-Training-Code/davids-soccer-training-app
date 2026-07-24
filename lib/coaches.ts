@@ -6,6 +6,7 @@ import {
   DEFAULT_SCHEDULES,
   DEFAULT_HORIZON_MONTHS,
   isWholeHourBlock,
+  type CoachLocation,
   type CoachProfile,
   type CoachSchedule,
   type CoachSlug,
@@ -21,6 +22,7 @@ type StaffRow = {
   booking_role: string | null;
   booking_schedule: unknown;
   booking_horizon_months: number | null;
+  booking_locations: unknown;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -80,6 +82,29 @@ export function sanitizeSchedule(raw: unknown): CoachSchedule {
   return out;
 }
 
+// Normalize stored training locations: drop blanks, trim, and guarantee exactly
+// one preferred (the first, if none/many were flagged). Used on read and write.
+export function sanitizeLocations(raw: unknown): CoachLocation[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CoachLocation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const city = typeof o.city === "string" ? o.city.trim() : "";
+    const address = typeof o.address === "string" ? o.address.trim() : "";
+    if (!city && !address) continue; // wholly empty row
+    out.push({ city, address, preferred: o.preferred === true });
+  }
+  // Exactly one preferred: keep the first flagged one, or default to the first.
+  let picked = false;
+  for (const l of out) {
+    if (l.preferred && !picked) picked = true;
+    else l.preferred = false;
+  }
+  if (!picked && out.length > 0) out[0].preferred = true;
+  return out;
+}
+
 // Clamp a stored horizon to a sane 1–24 months, falling back to the default.
 export function sanitizeHorizon(raw: unknown): number {
   if (raw == null) return DEFAULT_HORIZON_MONTHS;
@@ -95,7 +120,7 @@ function scheduleOrDefault(slug: CoachSlug, raw: unknown): CoachSchedule {
 
 async function fetchStaffBySlug(): Promise<Map<string, StaffRow>> {
   const rows = (await sql`
-    SELECT slug, booking_bio, booking_role, booking_schedule, booking_horizon_months
+    SELECT slug, booking_bio, booking_role, booking_schedule, booking_horizon_months, booking_locations
     FROM crm_staff
     WHERE slug IS NOT NULL
   `) as unknown as StaffRow[];
@@ -114,6 +139,7 @@ export async function getCoachProfiles(): Promise<Record<CoachSlug, CoachProfile
       role: row?.booking_role ?? null,
       schedule: scheduleOrDefault(slug, row?.booking_schedule),
       horizonMonths: sanitizeHorizon(row?.booking_horizon_months),
+      locations: sanitizeLocations(row?.booking_locations),
     };
   }
   return out;

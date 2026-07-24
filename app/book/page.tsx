@@ -10,8 +10,10 @@ import BookingSection from "./BookingSection";
 export const dynamic = "force-dynamic";
 
 function coachFromSearchParams(coachParam?: string | string[]): string | null {
-  const coach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
-  return coach === "all" ? null : COACH_LABELS[coach];
+  const raw = Array.isArray(coachParam) ? coachParam[0] : coachParam;
+  // A bare /book stays generic ("Book a Session"); a ?coach= link names the coach.
+  if (!raw || !raw.trim()) return null;
+  return COACH_LABELS[parseCoachParam(raw)] ?? null;
 }
 
 // Title/preview reflect the ?coach= param so a shared link (e.g. in a text
@@ -43,7 +45,7 @@ export default async function BookPage({
   const session = await getServerSession(authOptions);
   const isAdmin = session?.user?.isAdmin === true;
 
-  // ?coach=david | simon | simpson | all selects the coach tab (defaults to "all").
+  // ?coach=david | simon | simpson | girish selects the coach tab (defaults to David).
   const coachParam = (await searchParams).coach;
   const initialCoach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
 

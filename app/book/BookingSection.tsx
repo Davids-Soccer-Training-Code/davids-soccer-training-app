@@ -18,11 +18,11 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Toggle order: "All" first, then each coach in display order.
-const TOGGLE: { value: CoachSelection; label: string }[] = [
-  { value: "all", label: "All" },
-  ...COACH_SLUGS.map((slug) => ({ value: slug, label: COACH_LABELS[slug] })),
-];
+// One tab per coach, in display order.
+const TOGGLE: { value: CoachSlug; label: string }[] = COACH_SLUGS.map((slug) => ({
+  value: slug,
+  label: COACH_LABELS[slug],
+}));
 
 // Render a coach's bio (crm_staff.description) — newline-separated paragraphs.
 function CoachBio({ label, profile }: { label: string; profile: CoachProfile }) {
@@ -50,52 +50,38 @@ function CoachBio({ label, profile }: { label: string; profile: CoachProfile }) 
 
 export default function BookingSection({
   isAdmin = false,
-  initialCoach = "all",
+  initialCoach = "david",
   coaches,
 }: {
   isAdmin?: boolean;
   initialCoach?: CoachSelection;
   coaches: Record<CoachSlug, CoachProfile>;
 }) {
-  const [coach, setCoach] = useState<CoachSelection>(initialCoach);
-  const isAll = coach === "all";
-  // The single selected coach (or null in the "All" view), and its accent —
-  // only non-David coaches have one.
-  const selected = isAll ? null : coach;
-  const selectedLabel = selected ? COACH_LABELS[selected] : null;
-  const selectedAccent = selected ? COACH_ACCENT[selected] ?? null : null;
+  // "all" was retired; parseCoachParam never yields it, but coerce defensively.
+  const startCoach: CoachSlug = initialCoach === "all" ? "david" : initialCoach;
+  const [coach, setCoach] = useState<CoachSlug>(startCoach);
 
-  // Coaches whose slots get an accent color in the "All" view (everyone but David).
-  const accentCoaches = COACH_SLUGS.filter((slug) => COACH_ACCENT[slug]);
+  const selectedLabel = COACH_LABELS[coach];
+  const selectedAccent = COACH_ACCENT[coach] ?? null;
 
-  // Which coaches' hours to show, in order.
-  const visibleCoaches: CoachSlug[] = isAll ? [...COACH_SLUGS] : [coach as CoachSlug];
-
-  // Giant title that makes the selected coach unmistakable.
-  const titleText = isAll ? "All Coaches" : selectedLabel;
+  // Giant title that names the selected coach.
   const titleColor = selectedAccent ? selectedAccent.tagText : "text-emerald-700";
-
-  const selectedHasBio = selected ? Boolean((coaches[selected].bio ?? "").trim()) : false;
+  const selectedHasBio = Boolean((coaches[coach].bio ?? "").trim());
 
   // Schedules keyed by slug — handed to the calendar to generate slots.
   const schedules = Object.fromEntries(
     COACH_SLUGS.map((slug) => [slug, coaches[slug].schedule])
   );
 
-  // How far ahead the calendar shows: this coach's horizon, or the widest in
-  // the "All" view.
-  const horizonMonths = isAll
-    ? Math.max(...COACH_SLUGS.map((s) => coaches[s].horizonMonths))
-    : coaches[coach as CoachSlug].horizonMonths;
-
+  const horizonMonths = coaches[coach].horizonMonths;
   const today = todayStr();
+  const hourPeriods = scheduleToPeriodHours(coaches[coach].schedule, today);
 
   // Switch coaches and mirror the choice in the URL (?coach=…) so it stays
   // shareable and the address bar reflects the current tab.
-  function selectCoach(value: CoachSelection) {
+  function selectCoach(value: CoachSlug) {
     setCoach(value);
-    const url = value === "all" ? "/book" : `/book?coach=${value}`;
-    window.history.replaceState(null, "", url);
+    window.history.replaceState(null, "", `/book?coach=${value}`);
   }
 
   return (
@@ -125,38 +111,54 @@ export default function BookingSection({
 
       {/* Giant title — makes the selected coach unmistakable */}
       <h2 className={`mb-4 text-4xl font-extrabold tracking-tight sm:text-5xl ${titleColor}`}>
-        {titleText}
+        {selectedLabel}
       </h2>
 
-      {/* "All" view legend — explains each coach's colored slots */}
-      {isAll && (
-        <div className="mb-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          <span className="font-semibold text-gray-900">Showing all coaches.</span> Slots marked{" "}
-          {accentCoaches.map((slug, i) => (
-            <span key={slug}>
-              <span className={`font-semibold ${COACH_ACCENT[slug].tagText}`}>
-                {COACH_ACCENT[slug].tag}
-              </span>
-              {i < accentCoaches.length - 1 ? " and " : ""}
-            </span>
-          ))}{" "}
-          are with that coach — everything else is with Coach David. Pick a coach&apos;s tab above
-          to learn more about them.
+      {/* Meet Coach … — single-coach view with a bio */}
+      {selectedHasBio && (
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
+          <CoachBio label={selectedLabel} profile={coaches[coach]} />
         </div>
       )}
 
-      {/* Meet Coach … — single-coach view with a bio */}
-      {selected && selectedHasBio && (
+      {/* Where the coach trains — preferred location first */}
+      {coaches[coach].locations.length > 0 && (
         <div className="mb-6 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
-          <CoachBio label={selectedLabel ?? ""} profile={coaches[selected]} />
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-gray-500">
+            Where {selectedLabel} trains
+          </h3>
+          <ul className="mt-3 space-y-2.5">
+            {[...coaches[coach].locations]
+              .sort((a, b) => Number(b.preferred) - Number(a.preferred))
+              .map((loc, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="mt-0.5 leading-none text-emerald-600" aria-hidden>
+                    📍
+                  </span>
+                  <div>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {loc.city || loc.address}
+                    </span>
+                    {loc.preferred && (
+                      <span className="ml-2 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        Preferred
+                      </span>
+                    )}
+                    {loc.address && loc.city && (
+                      <div className="text-sm text-gray-600">{loc.address}</div>
+                    )}
+                  </div>
+                </li>
+              ))}
+          </ul>
         </div>
       )}
 
       {/* 24-hour notice — names the selected coach */}
       <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <span className="font-semibold">Important:</span>{" "}If you book less than 24 hours in
-        advance, there&apos;s a chance {selectedLabel ?? "your coach"}{" "}won&apos;t see your
-        request in time. Please text or call Coach David directly to confirm the session.
+        advance, there&apos;s a chance {selectedLabel}{" "}won&apos;t see your request in time.
+        Please text or call Coach David directly to confirm the session.
       </div>
 
       {/* Weather policy — sessions are cancelled in unsafe conditions */}
@@ -172,52 +174,27 @@ export default function BookingSection({
           text you to confirm within 24 hours.
         </p>
 
-        <div className="mt-4 flex flex-col gap-4">
-          {visibleCoaches.map((slug) => {
-            // Each coach's slots are accented only in the "All" view.
-            const accent = isAll && COACH_ACCENT[slug] ? COACH_ACCENT[slug] : null;
-            const periods = scheduleToPeriodHours(coaches[slug].schedule, today);
-            if (periods.length === 0) return null;
-            return (
-              <div key={slug}>
-                {isAll && (
-                  <div
-                    className={
-                      accent ? `mb-1 text-sm font-semibold ${accent.tagText}` : "mb-1 text-sm font-semibold text-emerald-700"
-                    }
-                  >
-                    {COACH_LABELS[slug]}
-                  </div>
-                )}
-                <div className="flex flex-col gap-2">
-                  {periods.map((p, pi) => (
-                    <div key={pi}>
-                      {p.label && (
-                        <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
-                          {p.label}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {p.lines.map((h, i) => (
-                          <div
-                            key={i}
-                            className={
-                              accent
-                                ? accent.hoursCard
-                                : "rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
-                            }
-                          >
-                            <span className="font-semibold text-gray-800">{h.days}</span>
-                            <span className="ml-2 text-gray-600">{h.time}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+        <div className="mt-4 flex flex-col gap-2">
+          {hourPeriods.map((p, pi) => (
+            <div key={pi}>
+              {p.label && (
+                <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                  {p.label}
                 </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {p.lines.map((h, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm"
+                  >
+                    <span className="font-semibold text-gray-800">{h.days}</span>
+                    <span className="ml-2 text-gray-600">{h.time}</span>
+                  </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </div>
 

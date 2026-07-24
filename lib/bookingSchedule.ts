@@ -198,10 +198,12 @@ export const COACH_LABELS: Record<string, string> = {
   simon: "Coach Simon",
   simpson: "Coach Simpson",
   girish: "Coach Girish",
+  george: "Coach George",
+  tyrone: "Coach Tyrone",
 };
 
 // Display/toggle order. "all" is layered on top of this in the UI.
-export const COACH_SLUGS = ["david", "simon", "simpson", "girish"] as const;
+export const COACH_SLUGS = ["david", "simon", "simpson", "girish", "george", "tyrone"] as const;
 export type CoachSlug = (typeof COACH_SLUGS)[number];
 export type CoachSelection = "all" | CoachSlug;
 
@@ -213,6 +215,10 @@ const EVENING: TimeBlock = { start: "17:00", end: "20:00" };
 // Coach Girish runs a shorter weekend morning and an earlier (4–7 PM) evening.
 const WEEKEND_MORNING: TimeBlock = { start: "08:00", end: "10:00" };
 const EARLY_EVENING: TimeBlock = { start: "16:00", end: "19:00" };
+// Coach George starts mornings at 7 AM and is open to either evening window
+// (4–7 or 5–8 PM), so his evening spans the full 4–8 PM range.
+const LONG_MORNING: TimeBlock = { start: "07:00", end: "11:00" };
+const WIDE_EVENING: TimeBlock = { start: "16:00", end: "20:00" };
 const openPeriod = (days: DayBlocks): CoachSchedule => [{ start: null, end: null, days }];
 export const DEFAULT_SCHEDULES: Record<CoachSlug, CoachSchedule> = {
   david: openPeriod({
@@ -231,7 +237,20 @@ export const DEFAULT_SCHEDULES: Record<CoachSlug, CoachSchedule> = {
     "0": [WEEKEND_MORNING], "1": [MORNING, EARLY_EVENING], "2": [MORNING, EARLY_EVENING],
     "3": [MORNING, EARLY_EVENING], "4": [MORNING, EARLY_EVENING], "5": [MORNING], "6": [WEEKEND_MORNING],
   }),
+  george: openPeriod({
+    "0": [LONG_MORNING, WIDE_EVENING], "1": [], "2": [], "3": [EVENING],
+    "4": [], "5": [], "6": [LONG_MORNING, WIDE_EVENING],
+  }),
+  // Coach Tyrone coaches Mon/Wed/Fri evenings, open to either window (4–8 PM).
+  tyrone: openPeriod({
+    "0": [], "1": [WIDE_EVENING], "2": [], "3": [WIDE_EVENING], "4": [], "5": [WIDE_EVENING], "6": [],
+  }),
 };
+
+// One training location a coach offers. `city` is what parents see at a glance;
+// `address` is the full venue/street (may be blank for a city-only area). Exactly
+// one location per coach is `preferred` (their main spot).
+export type CoachLocation = { city: string; address: string; preferred: boolean };
 
 // A coach profile as the booking page and admin editor consume it. Plain data
 // (serializable) so a server component can hand it to a client component.
@@ -241,6 +260,7 @@ export type CoachProfile = {
   role: string | null;
   schedule: CoachSchedule;
   horizonMonths: number;
+  locations: CoachLocation[];
 };
 
 // Legacy ?coach= slugs that have since been renamed, kept so links shared
@@ -248,11 +268,11 @@ export type CoachProfile = {
 // launched as "marcanthony".)
 const COACH_ALIASES: Record<string, CoachSlug> = { marcanthony: "simpson" };
 
-// Normalize a ?coach= URL param (or toggle value) to a known selection.
-// Anything unrecognized — including an empty param — falls back to "all".
+// Normalize a ?coach= URL param (or toggle value) to a known coach. Anything
+// unrecognized — an empty param, or the retired "all" value — falls back to
+// Coach David, so a bare /book (or an old ?coach=all link) lands on David.
 export function parseCoachParam(value: string | null | undefined): CoachSelection {
   const v = (value ?? "").trim().toLowerCase();
-  if (v === "all") return "all";
   if (v in COACH_ALIASES) return COACH_ALIASES[v];
-  return (COACH_SLUGS as readonly string[]).includes(v) ? (v as CoachSlug) : "all";
+  return (COACH_SLUGS as readonly string[]).includes(v) ? (v as CoachSlug) : "david";
 }

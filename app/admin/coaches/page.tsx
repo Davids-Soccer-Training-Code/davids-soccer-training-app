@@ -22,6 +22,7 @@ export default async function AdminCoachesPage() {
     bio: profiles[slug].bio ?? "",
     schedule: profiles[slug].schedule,
     horizonMonths: profiles[slug].horizonMonths,
+    locations: profiles[slug].locations,
   }));
 
   return (

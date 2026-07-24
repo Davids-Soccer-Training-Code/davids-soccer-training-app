@@ -16,6 +16,8 @@ const ACTIVE_PILL: Record<string, string> = {
   simon: "rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow",
   simpson: "rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow",
   girish: "rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow",
+  george: "rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow",
+  tyrone: "rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-yellow-950 shadow",
 };
 const ACTIVE_PILL_FALLBACK =
   "rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow";
