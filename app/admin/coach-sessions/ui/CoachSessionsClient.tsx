@@ -5,13 +5,15 @@ import Link from "next/link";
 import { fmtTime12, type CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
 
-export type PlayerRef = { id: number; name: string };
+// `appId` is the app account uuid, or null when the person has no app profile
+// (in which case the name is shown as plain, non-clickable text).
+export type PlayerRef = { appId: string | null; name: string };
 
 export type CoachSession = {
   date: string; // YYYY-MM-DD (Arizona)
   start: string; // HH:MM
   end: string; // HH:MM
-  parentId: number | null;
+  parentAppId: string | null;
   parentName: string | null;
   players: PlayerRef[];
   title: string | null;
@@ -61,35 +63,47 @@ function SessionCard({ s }: { s: CoachSession }) {
         {hasPlayers ? (
           <>
             {s.players.map((pl, idx) => (
-              <span key={pl.id}>
+              <span key={`${pl.appId ?? "noacct"}-${pl.name}-${idx}`}>
                 {idx > 0 && <span className="text-gray-400">, </span>}
-                <Link
-                  href={`/admin/player/${pl.id}`}
-                  className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
-                >
-                  {pl.name}
-                </Link>
+                {pl.appId ? (
+                  <Link
+                    href={`/admin/player/${pl.appId}`}
+                    className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
+                  >
+                    {pl.name}
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-gray-900">{pl.name}</span>
+                )}
               </span>
             ))}
-            {s.parentId && s.parentName && (
+            {s.parentName && (
               <span className="text-gray-500">
                 {" · parent "}
-                <Link
-                  href={`/admin/parent/${s.parentId}`}
-                  className="text-gray-600 underline-offset-2 hover:text-emerald-700 hover:underline"
-                >
-                  {s.parentName}
-                </Link>
+                {s.parentAppId ? (
+                  <Link
+                    href={`/admin/parent/${s.parentAppId}`}
+                    className="text-gray-600 underline-offset-2 hover:text-emerald-700 hover:underline"
+                  >
+                    {s.parentName}
+                  </Link>
+                ) : (
+                  <span className="text-gray-600">{s.parentName}</span>
+                )}
               </span>
             )}
           </>
-        ) : s.parentId && s.parentName ? (
-          <Link
-            href={`/admin/parent/${s.parentId}`}
-            className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
-          >
-            {s.parentName}
-          </Link>
+        ) : s.parentName ? (
+          s.parentAppId ? (
+            <Link
+              href={`/admin/parent/${s.parentAppId}`}
+              className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
+            >
+              {s.parentName}
+            </Link>
+          ) : (
+            <span className="font-semibold text-gray-900">{s.parentName}</span>
+          )
         ) : (
           <span className="font-semibold">{who}</span>
         )}
