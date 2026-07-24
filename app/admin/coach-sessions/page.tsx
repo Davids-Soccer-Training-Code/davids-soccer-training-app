@@ -9,14 +9,17 @@ import { CoachSessionsClient, type CoachSession } from "./ui/CoachSessionsClient
 
 export const dynamic = "force-dynamic";
 
+type PlayerRef = { id: number; name: string };
+
 type Row = {
   staff_slug: string | null;
   title: string | null;
   date: string;
   start: string;
   end: string;
+  parent_id: number | null;
   parent_name: string | null;
-  player_name: string | null;
+  players: PlayerRef[];
   location: string | null;
   status: string | null;
   kind: "regular" | "first";
@@ -48,17 +51,24 @@ export default async function CoachSessionsPage() {
         to_char((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'YYYY-MM-DD') AS date,
         to_char((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
         to_char((COALESCE(s.session_end_date, s.session_date + interval '1 hour')::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS "end",
+        p.id AS parent_id,
         p.name AS parent_name,
-        pl.name AS player_name,
+        COALESCE(
+          json_agg(json_build_object('id', pl.id, 'name', pl.name) ORDER BY pl.name)
+            FILTER (WHERE pl.id IS NOT NULL),
+          '[]'
+        ) AS players,
         s.location,
         s.status,
         'regular' AS kind
       FROM crm_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
       LEFT JOIN crm_parents p ON p.id = s.parent_id
-      LEFT JOIN crm_players pl ON pl.id = s.player_id
+      LEFT JOIN crm_session_players sp ON sp.session_id = s.id
+      LEFT JOIN crm_players pl ON pl.id = sp.player_id
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) >= now() - interval '3 hours'
+      GROUP BY s.id, st.slug, p.id, p.name
       UNION ALL
       SELECT
         st.slug AS staff_slug,
@@ -66,17 +76,24 @@ export default async function CoachSessionsPage() {
         to_char((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'YYYY-MM-DD') AS date,
         to_char((s.session_date::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS start,
         to_char((COALESCE(s.session_end_date, s.session_date + interval '1 hour')::timestamptz) AT TIME ZONE 'America/Phoenix', 'HH24:MI') AS "end",
+        p.id AS parent_id,
         p.name AS parent_name,
-        pl.name AS player_name,
+        COALESCE(
+          json_agg(json_build_object('id', pl.id, 'name', pl.name) ORDER BY pl.name)
+            FILTER (WHERE pl.id IS NOT NULL),
+          '[]'
+        ) AS players,
         s.location,
         s.status,
         'first' AS kind
       FROM crm_first_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
       LEFT JOIN crm_parents p ON p.id = s.parent_id
-      LEFT JOIN crm_players pl ON pl.id = s.player_id
+      LEFT JOIN crm_first_session_players fsp ON fsp.first_session_id = s.id
+      LEFT JOIN crm_players pl ON pl.id = fsp.player_id
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) >= now() - interval '3 hours'
+      GROUP BY s.id, st.slug, p.id, p.name
     ) u
     ORDER BY u.date, u.start
   `) as unknown as Row[];
@@ -90,8 +107,9 @@ export default async function CoachSessionsPage() {
       date: r.date,
       start: r.start,
       end: r.end,
+      parentId: r.parent_id,
       parentName: r.parent_name,
-      playerName: r.player_name,
+      players: Array.isArray(r.players) ? r.players : [],
       title: r.title,
       location: r.location,
       status: r.status,

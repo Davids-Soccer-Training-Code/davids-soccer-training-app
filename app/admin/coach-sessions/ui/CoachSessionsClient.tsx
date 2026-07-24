@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { fmtTime12, type CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
+
+export type PlayerRef = { id: number; name: string };
 
 export type CoachSession = {
   date: string; // YYYY-MM-DD (Arizona)
   start: string; // HH:MM
   end: string; // HH:MM
+  parentId: number | null;
   parentName: string | null;
-  playerName: string | null;
+  players: PlayerRef[];
   title: string | null;
   location: string | null;
   status: string | null;
@@ -27,7 +31,9 @@ function fmtDate(dateStr: string): string {
 }
 
 function SessionCard({ s }: { s: CoachSession }) {
-  const who = s.playerName || s.parentName || s.title || "Session";
+  const hasPlayers = s.players.length > 0;
+  // The card's title text (used to avoid repeating the title line below).
+  const who = s.players.map((p) => p.name).join(", ") || s.parentName || s.title || "Session";
   return (
     <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -52,9 +58,40 @@ function SessionCard({ s }: { s: CoachSession }) {
       </div>
 
       <div className="mt-2 text-sm text-gray-800">
-        <span className="font-semibold">{who}</span>
-        {s.playerName && s.parentName && (
-          <span className="text-gray-500"> · parent {s.parentName}</span>
+        {hasPlayers ? (
+          <>
+            {s.players.map((pl, idx) => (
+              <span key={pl.id}>
+                {idx > 0 && <span className="text-gray-400">, </span>}
+                <Link
+                  href={`/admin/player/${pl.id}`}
+                  className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
+                >
+                  {pl.name}
+                </Link>
+              </span>
+            ))}
+            {s.parentId && s.parentName && (
+              <span className="text-gray-500">
+                {" · parent "}
+                <Link
+                  href={`/admin/parent/${s.parentId}`}
+                  className="text-gray-600 underline-offset-2 hover:text-emerald-700 hover:underline"
+                >
+                  {s.parentName}
+                </Link>
+              </span>
+            )}
+          </>
+        ) : s.parentId && s.parentName ? (
+          <Link
+            href={`/admin/parent/${s.parentId}`}
+            className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
+          >
+            {s.parentName}
+          </Link>
+        ) : (
+          <span className="font-semibold">{who}</span>
         )}
       </div>
       {s.title && who !== s.title && (
