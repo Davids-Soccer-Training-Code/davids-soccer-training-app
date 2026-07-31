@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle, XCircle, Trash2, ChevronDown, ChevronRight } from "lucide-react";
-import { COACH_LABELS } from "@/lib/bookingSchedule";
+import { COACH_LABELS, COACH_SLUGS, parseCoachParam, type CoachSlug } from "@/lib/bookingSchedule";
 import { COACH_ACCENT, DAVID_BADGE } from "@/lib/coachTheme";
+import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
 
 export type BookingRequest = {
   id: string;
@@ -22,6 +23,13 @@ export type BookingRequest = {
 
 function coachLabel(coach: string | null): string {
   return COACH_LABELS[coach ?? "david"] ?? "Coach David";
+}
+
+// Which coach tab a request belongs to. Requests stored before coaches existed
+// have a null coach, and legacy slugs (e.g. "marcanthony") still live in the
+// table — parseCoachParam maps both onto a current coach, defaulting to David.
+function coachSlugOf(coach: string | null): CoachSlug {
+  return parseCoachParam(coach) as CoachSlug;
 }
 
 // Match the booking calendar: each non-David coach has an accent badge, David is green.
@@ -165,6 +173,7 @@ export function BookingRequestsClient({
   initialRequests: BookingRequest[];
 }) {
   const [requests, setRequests] = useState(initialRequests);
+  const [active, setActive] = useState<CoachSlug>("david");
   const [acting, setActing] = useState<Record<string, string>>({});
   const [confirmedOpen, setConfirmedOpen] = useState(false);
   const [cancelledOpen, setCancelledOpen] = useState(false);
@@ -195,9 +204,22 @@ export function BookingRequestsClient({
     });
   }
 
-  const pending = requests.filter((r) => r.status === "pending");
-  const confirmed = requests.filter((r) => r.status === "confirmed" || r.status === "blocked");
-  const cancelled = requests.filter((r) => r.status === "cancelled");
+  // One tab per coach. The badge counts pending requests — the ones that still
+  // need a decision — rather than every request the coach has ever had.
+  const items = useMemo(
+    () =>
+      COACH_SLUGS.map((slug) => ({
+        slug,
+        label: COACH_LABELS[slug],
+        count: requests.filter((r) => r.status === "pending" && coachSlugOf(r.coach) === slug).length,
+      })),
+    [requests]
+  );
+
+  const mine = requests.filter((r) => coachSlugOf(r.coach) === active);
+  const pending = mine.filter((r) => r.status === "pending");
+  const confirmed = mine.filter((r) => r.status === "confirmed" || r.status === "blocked");
+  const cancelled = mine.filter((r) => r.status === "cancelled");
 
   if (requests.length === 0) {
     return (
@@ -208,91 +230,101 @@ export function BookingRequestsClient({
   }
 
   return (
-    <div className="space-y-8">
-      {/* Pending — always visible at top */}
-      <section>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Pending{pending.length > 0 ? ` (${pending.length})` : ""}
-        </h2>
-        {pending.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
-            No pending requests.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {pending.map((r) => (
-              <RequestCard
-                key={r.id}
-                r={r}
-                busy={acting[r.id]}
-                onPatch={patch}
-                onDelete={del}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+    <div>
+      <CoachSwitcher items={items} active={active} onChange={setActive} />
 
-      {/* Confirmed — collapsible */}
-      {confirmed.length > 0 && (
-        <section>
-          <button
-            type="button"
-            onClick={() => setConfirmedOpen((o) => !o)}
-            className="flex w-full items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-left text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
-          >
-            {confirmedOpen ? (
-              <ChevronDown className="h-4 w-4 shrink-0" />
+      {mine.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
+          No booking requests for {COACH_LABELS[active]}.
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {/* Pending — always visible at top */}
+          <section>
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+              Pending{pending.length > 0 ? ` (${pending.length})` : ""}
+            </h2>
+            {pending.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
+                No pending requests.
+              </div>
             ) : (
-              <ChevronRight className="h-4 w-4 shrink-0" />
+              <div className="space-y-4">
+                {pending.map((r) => (
+                  <RequestCard
+                    key={r.id}
+                    r={r}
+                    busy={acting[r.id]}
+                    onPatch={patch}
+                    onDelete={del}
+                  />
+                ))}
+              </div>
             )}
-            Confirmed ({confirmed.length})
-          </button>
-          {confirmedOpen && (
-            <div className="mt-3 space-y-4">
-              {confirmed.map((r) => (
-                <RequestCard
-                  key={r.id}
-                  r={r}
-                  busy={acting[r.id]}
-                  onPatch={patch}
-                  onDelete={del}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+          </section>
 
-      {/* Cancelled — collapsible */}
-      {cancelled.length > 0 && (
-        <section>
-          <button
-            type="button"
-            onClick={() => setCancelledOpen((o) => !o)}
-            className="flex w-full items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-3 text-left text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-          >
-            {cancelledOpen ? (
-              <ChevronDown className="h-4 w-4 shrink-0" />
-            ) : (
-              <ChevronRight className="h-4 w-4 shrink-0" />
-            )}
-            Cancelled ({cancelled.length})
-          </button>
-          {cancelledOpen && (
-            <div className="mt-3 space-y-4">
-              {cancelled.map((r) => (
-                <RequestCard
-                  key={r.id}
-                  r={r}
-                  busy={acting[r.id]}
-                  onPatch={patch}
-                  onDelete={del}
-                />
-              ))}
-            </div>
+          {/* Confirmed — collapsible */}
+          {confirmed.length > 0 && (
+            <section>
+              <button
+                type="button"
+                onClick={() => setConfirmedOpen((o) => !o)}
+                className="flex w-full items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-left text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+              >
+                {confirmedOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                )}
+                Confirmed ({confirmed.length})
+              </button>
+              {confirmedOpen && (
+                <div className="mt-3 space-y-4">
+                  {confirmed.map((r) => (
+                    <RequestCard
+                      key={r.id}
+                      r={r}
+                      busy={acting[r.id]}
+                      onPatch={patch}
+                      onDelete={del}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
           )}
-        </section>
+
+          {/* Cancelled — collapsible */}
+          {cancelled.length > 0 && (
+            <section>
+              <button
+                type="button"
+                onClick={() => setCancelledOpen((o) => !o)}
+                className="flex w-full items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-3 text-left text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+              >
+                {cancelledOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                )}
+                Cancelled ({cancelled.length})
+              </button>
+              {cancelledOpen && (
+                <div className="mt-3 space-y-4">
+                  {cancelled.map((r) => (
+                    <RequestCard
+                      key={r.id}
+                      r={r}
+                      busy={acting[r.id]}
+                      onPatch={patch}
+                      onDelete={del}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
       )}
     </div>
   );

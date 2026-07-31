@@ -34,7 +34,7 @@ export default async function BookingRequestsPage() {
             <p className="mt-1 text-sm text-gray-600">
               {requests.length === 0
                 ? "No booking requests yet."
-                : `${requests.length} total · ${pending} pending`}
+                : `${requests.length} total · ${pending} pending across all coaches`}
             </p>
           </div>
           <Link
