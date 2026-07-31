@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { sql } from "@/db";
 import { assertAdmin } from "@/lib/adminAuth";
+import { assertBookingRequestsAccess } from "@/lib/bookingRequestsGate";
 import { sendSmsViaTwilio } from "@/lib/twilio";
 import { COACH_LABELS } from "@/lib/bookingSchedule";
 
@@ -20,6 +21,11 @@ export async function PATCH(
 ) {
   const err = await assertAdmin(req);
   if (err) return err;
+
+  // Admin login isn't enough here: the owner code gates changing bookings, not
+  // just viewing them, so the page gate can't be stepped around via the API.
+  const locked = assertBookingRequestsAccess(req);
+  if (locked) return locked;
 
   const { requestId } = await ctx.params;
   const body = await req.json().catch(() => ({})) as { status?: string };
@@ -70,6 +76,11 @@ export async function DELETE(
 ) {
   const err = await assertAdmin(req);
   if (err) return err;
+
+  // Admin login isn't enough here: the owner code gates changing bookings, not
+  // just viewing them, so the page gate can't be stepped around via the API.
+  const locked = assertBookingRequestsAccess(req);
+  if (locked) return locked;
 
   const { requestId } = await ctx.params;
   await sql`DELETE FROM session_booking_requests WHERE id = ${requestId}`;
