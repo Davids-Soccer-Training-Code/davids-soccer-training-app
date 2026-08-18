@@ -41,6 +41,10 @@ function instruction(r: PendingRow): string {
       return `${player} has started properly. Write the baseline snapshot — early coaching read, early strengths, focus areas, learning notes, and the starting training direction.`;
     case "data_collection":
       return `${player} needs test data. Run the tests, save each one as you go, then hit Recompute stats at the bottom or it won't show on their profile.`;
+    case "goal_setup":
+      return `${player} has no goal running. Set a focus period — pick one thing to work on, give it a start and end date, and break it into steps they can tick off in the app.`;
+    case "goal_checkin":
+      return `Two more sessions with ${player}. Go through their period goal together — which steps are done, what's stuck, does the focus still fit?`;
     case "parent_checkin":
       return `It's been two weeks since you checked in with ${parent} about ${player}. Message them — how is ${player} feeling, has anything changed, anything they want worked on?`;
     default:
@@ -61,6 +65,8 @@ function workLink(r: PendingRow): { label: string; url: string } | null {
       return { label: "Write it", url: appUrl(`/admin/coach/add-report?player=${r.app_id}&type=progress`) };
     case "data_collection":
       return { label: "Add tests", url: appUrl(`/admin/coach/add-tests?player=${r.app_id}`) };
+    case "goal_setup":
+      return { label: "Set goal", url: appUrl(`/admin/coach/add-goal?player=${r.app_id}`) };
     default:
       return null;
   }

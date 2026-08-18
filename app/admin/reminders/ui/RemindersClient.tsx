@@ -14,7 +14,9 @@ export type ReminderKind =
   | "progress_report"
   | "parent_checkin"
   | "media"
-  | "data_collection";
+  | "data_collection"
+  | "goal_setup"
+  | "goal_checkin";
 
 export type Reminder = {
   id: string;
@@ -35,6 +37,8 @@ const KIND_LABEL: Record<ReminderKind, string> = {
   initial_report: "Initial report",
   parent_checkin: "Parent check-in",
   data_collection: "Collect test data",
+  goal_setup: "Set a period goal",
+  goal_checkin: "Goal check-in",
 };
 
 const KIND_BLURB: Record<ReminderKind, string> = {
@@ -44,6 +48,8 @@ const KIND_BLURB: Record<ReminderKind, string> = {
   initial_report: "New to the program — write the baseline snapshot.",
   parent_checkin: "Two weeks since the last check-in. Ask how they're feeling.",
   data_collection: "Run the tests so the report has real numbers behind it.",
+  goal_setup: "No goal running. Set a focus period with steps.",
+  goal_checkin: "Two sessions on — go through the goal and their steps.",
 };
 
 // Report reminders open the coach form prefilled; data reminders open the test
@@ -53,11 +59,14 @@ const KIND_HREF: Partial<Record<ReminderKind, (appId: string) => string>> = {
   initial_report: (id) => `/admin/coach/add-report?player=${id}&type=baseline`,
   progress_report: (id) => `/admin/coach/add-report?player=${id}&type=progress`,
   data_collection: (id) => `/admin/coach/add-tests?player=${id}`,
+  goal_setup: (id) => `/admin/coach/add-goal?player=${id}`,
 };
 
 const KIND_ORDER: ReminderKind[] = [
   "media",
   "mini_note",
+  "goal_checkin",
+  "goal_setup",
   "data_collection",
   "progress_report",
   "initial_report",
@@ -159,7 +168,11 @@ function ReminderCard({ r }: { r: Reminder }) {
               href={href}
               className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
             >
-              {r.kind === "data_collection" ? "Add tests" : "Write it"}
+              {r.kind === "data_collection"
+                ? "Add tests"
+                : r.kind === "goal_setup"
+                  ? "Set goal"
+                  : "Write it"}
             </Link>
           )}
           <button

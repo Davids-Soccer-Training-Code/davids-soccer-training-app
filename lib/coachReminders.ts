@@ -14,7 +14,9 @@ export type ReminderKind =
   | "progress_report"
   | "parent_checkin"
   | "media"
-  | "data_collection";
+  | "data_collection"
+  | "goal_setup"
+  | "goal_checkin";
 
 // Report reminders point at a report type; the other two have no artifact.
 export const REPORT_TYPE: Partial<Record<ReminderKind, "blurb" | "baseline" | "progress">> = {
@@ -30,6 +32,8 @@ export const KIND_LABEL: Record<ReminderKind, string> = {
   parent_checkin: "Parent check-in",
   media: "Photos & video",
   data_collection: "Collect test data",
+  goal_setup: "Set a period goal",
+  goal_checkin: "Goal check-in",
 };
 
 export const KIND_ORDER: ReminderKind[] = [
@@ -39,6 +43,8 @@ export const KIND_ORDER: ReminderKind[] = [
   "initial_report",
   "parent_checkin",
   "data_collection",
+  "goal_setup",
+  "goal_checkin",
 ];
 
 // How far ahead of a session the photos/video prompt appears. "Right before
@@ -328,6 +334,104 @@ async function generateDataCollection(): Promise<number> {
   return milestone.length + intro.length;
 }
 
+// No period goal covering today. Only period goals count — the old flat
+// player_goals table is no longer written to or shown anywhere.
+async function generateGoalSetup(): Promise<number> {
+  const rows = (await sql`
+    WITH last_seen AS (
+      SELECT
+        crm_player_id,
+        max(session_date) AS last_at,
+        (array_agg(coach_slug ORDER BY session_date DESC))[1] AS coach_slug
+      FROM coach_player_sessions
+      WHERE (session_date::timestamptz) <= now()
+      GROUP BY crm_player_id
+    )
+    INSERT INTO coach_reminders (coach_slug, crm_player_id, kind, anchor, anchor_date)
+    SELECT
+      l.coach_slug,
+      l.crm_player_id,
+      'goal_setup',
+      'no-active-goal',
+      (now() AT TIME ZONE 'America/Phoenix')::date
+    FROM last_seen l
+    LEFT JOIN players app ON app.crm_player_id = l.crm_player_id
+    WHERE ((l.last_at::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${START_DATE}::date
+      AND NOT EXISTS (
+        SELECT 1 FROM player_period_goals g
+        WHERE g.player_id = app.id
+          AND g.end_date >= (now() AT TIME ZONE 'America/Phoenix')::date
+      )
+    ON CONFLICT (kind, crm_player_id, anchor) DO NOTHING
+    RETURNING id
+  `) as unknown as Array<{ id: string }>;
+  return rows.length;
+}
+
+// Every other session, review the live goal with the player. Anchored on the
+// session count so it lands once per pair, not once per cron run.
+async function generateGoalCheckins(): Promise<number> {
+  const rows = (await sql`
+    WITH ranked AS (
+      SELECT
+        crm_player_id,
+        coach_slug,
+        session_date,
+        row_number() OVER (
+          PARTITION BY crm_player_id ORDER BY session_date, source, session_id
+        ) AS n
+      FROM coach_player_sessions
+      WHERE (session_date::timestamptz) <= now()
+    ),
+    every_other AS (
+      SELECT DISTINCT ON (crm_player_id) crm_player_id, coach_slug, session_date, n
+      FROM ranked
+      WHERE n % 2 = 0
+        AND ((session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date
+              >= ${START_DATE}::date
+      ORDER BY crm_player_id, n DESC
+    )
+    INSERT INTO coach_reminders (coach_slug, crm_player_id, kind, anchor, anchor_date)
+    SELECT
+      e.coach_slug,
+      e.crm_player_id,
+      'goal_checkin',
+      'count:' || e.n,
+      ((e.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date
+    FROM every_other e
+    LEFT JOIN players app ON app.crm_player_id = e.crm_player_id
+    -- Only worth asking about progress when there's a goal to progress against;
+    -- otherwise goal_setup is the reminder that applies.
+    WHERE EXISTS (
+      SELECT 1 FROM player_period_goals g
+      WHERE g.player_id = app.id
+        AND g.end_date >= (now() AT TIME ZONE 'America/Phoenix')::date
+    )
+    ON CONFLICT (kind, crm_player_id, anchor) DO NOTHING
+    RETURNING id
+  `) as unknown as Array<{ id: string }>;
+  return rows.length;
+}
+
+// A goal_setup reminder answers itself the moment a live period goal exists.
+async function closeSatisfiedGoals(): Promise<number> {
+  const rows = (await sql`
+    UPDATE coach_reminders cr
+    SET status = 'done', done_at = now()
+    FROM players app
+    WHERE app.crm_player_id = cr.crm_player_id
+      AND cr.status = 'open'
+      AND cr.kind = 'goal_setup'
+      AND EXISTS (
+        SELECT 1 FROM player_period_goals g
+        WHERE g.player_id = app.id
+          AND g.end_date >= (now() AT TIME ZONE 'America/Phoenix')::date
+      )
+    RETURNING cr.id
+  `) as unknown as Array<{ id: string }>;
+  return rows.length;
+}
+
 // Close anything whose report has since been written. Parent check-ins and
 // media prompts have no artifact to look for and are closed by hand.
 async function closeSatisfied(): Promise<number> {
@@ -379,11 +483,15 @@ export async function syncCoachReminders(): Promise<SyncResult> {
   const parent_checkin = await generateParentCheckins();
   const media = await generateMedia();
   const data_collection = await generateDataCollection();
+  const goal_setup = await generateGoalSetup();
+  const goal_checkin = await generateGoalCheckins();
   const closed = await closeSatisfied();
   const closed_data = await closeSatisfiedData();
+  const closed_goals = await closeSatisfiedGoals();
 
   return {
     mini_note, initial_report, progress_report, parent_checkin, media,
-    data_collection, closed: closed + closed_data,
+    data_collection, goal_setup, goal_checkin,
+    closed: closed + closed_data + closed_goals,
   };
 }
