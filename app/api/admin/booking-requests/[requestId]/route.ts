@@ -1,19 +1,10 @@
 import { NextRequest } from "next/server";
 import { sql } from "@/db";
 import { assertAdmin } from "@/lib/adminAuth";
-import { assertBookingRequestsAccess } from "@/lib/bookingRequestsGate";
-import { sendSmsViaTwilio } from "@/lib/twilio";
-import { COACH_LABELS } from "@/lib/bookingSchedule";
+import { assertOwnerAccess } from "@/lib/ownerGate";
+import { sendBookingConfirmationSms } from "@/lib/bookingConfirmSms";
 
 export const dynamic = "force-dynamic";
-
-function fmtTime(t: string) {
-  const [hStr, mStr] = t.split(":");
-  const h = Number(hStr);
-  const ampm = h < 12 ? "AM" : "PM";
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return `${h12}:${mStr} ${ampm}`;
-}
 
 export async function PATCH(
   req: NextRequest,
@@ -24,7 +15,7 @@ export async function PATCH(
 
   // Admin login isn't enough here: the owner code gates changing bookings, not
   // just viewing them, so the page gate can't be stepped around via the API.
-  const locked = assertBookingRequestsAccess(req);
+  const locked = await assertOwnerAccess(req);
   if (locked) return locked;
 
   const { requestId } = await ctx.params;
@@ -53,18 +44,12 @@ export async function PATCH(
 
   if (rows.length === 0) return new Response("Not found", { status: 404 });
 
-  const row = rows[0];
-  if (status === "confirmed" && row.phone) {
-    const slotDateLabel = new Date(row.slot_date + "T12:00:00").toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-    const coachLabel = COACH_LABELS[row.coach ?? "david"] ?? "Coach David";
-    await sendSmsViaTwilio(
-      `✅ Hi ${row.parent_name}, your session for ${row.player_name} with ${coachLabel} on ${slotDateLabel} at ${fmtTime(row.slot_start)} is confirmed. See you then! — ${coachLabel}`,
-      { to: row.phone }
-    ).catch(() => {});
+  // Confirming here marks the request and texts the parent but does NOT create
+  // a CRM session — that path is POST .../schedule, which is what the admin UI
+  // normally uses. This stays for the case where the session already exists in
+  // the CRM and the request just needs to stop showing as pending.
+  if (status === "confirmed") {
+    await sendBookingConfirmationSms(rows[0]);
   }
 
   return Response.json({ ok: true });
@@ -79,7 +64,7 @@ export async function DELETE(
 
   // Admin login isn't enough here: the owner code gates changing bookings, not
   // just viewing them, so the page gate can't be stepped around via the API.
-  const locked = assertBookingRequestsAccess(req);
+  const locked = await assertOwnerAccess(req);
   if (locked) return locked;
 
   const { requestId } = await ctx.params;

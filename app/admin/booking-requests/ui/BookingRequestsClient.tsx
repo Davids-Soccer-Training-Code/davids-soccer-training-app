@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle, XCircle, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle, XCircle, Trash2, ChevronDown, ChevronRight, CalendarCheck } from "lucide-react";
 import { COACH_LABELS, COACH_SLUGS, parseCoachParam, type CoachSlug } from "@/lib/bookingSchedule";
 import { COACH_ACCENT, DAVID_BADGE } from "@/lib/coachTheme";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
+import { ScheduleModal } from "./ScheduleModal";
 
 export type BookingRequest = {
   id: string;
@@ -19,6 +20,8 @@ export type BookingRequest = {
   status: "pending" | "confirmed" | "cancelled" | "blocked";
   coach: string | null;
   created_at: string;
+  crm_session_id: string | null;
+  crm_session_kind: "first" | "session" | null;
 };
 
 function coachLabel(coach: string | null): string {
@@ -64,11 +67,13 @@ const statusBadge: Record<string, string> = {
 function RequestCard({
   r,
   busy,
+  onConfirm,
   onPatch,
   onDelete,
 }: {
   r: BookingRequest;
   busy: string | undefined;
+  onConfirm: (r: BookingRequest) => void;
   onPatch: (id: string, status: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -86,6 +91,12 @@ function RequestCard({
             <span className={coachBadge(r.coach)}>
               {coachLabel(r.coach)}
             </span>
+            {r.crm_session_id && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                <CalendarCheck className="h-3 w-3" />
+                In CRM
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-sm text-gray-500">
             Player: <span className="font-medium text-gray-700">{r.player_name}</span>
@@ -97,11 +108,11 @@ function RequestCard({
             <button
               type="button"
               disabled={!!busy}
-              onClick={() => onPatch(r.id, "confirmed")}
+              onClick={() => onConfirm(r)}
               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
             >
               <CheckCircle className="h-3.5 w-3.5" />
-              {busy === "confirmed" ? "Confirming…" : "Confirm"}
+              Confirm…
             </button>
           )}
           {r.status !== "cancelled" && (
@@ -177,6 +188,15 @@ export function BookingRequestsClient({
   const [acting, setActing] = useState<Record<string, string>>({});
   const [confirmedOpen, setConfirmedOpen] = useState(false);
   const [cancelledOpen, setCancelledOpen] = useState(false);
+  const [scheduling, setScheduling] = useState<BookingRequest | null>(null);
+
+  // The CRM created the session, so the request is confirmed and linked.
+  function onScheduled(id: string) {
+    setRequests((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "confirmed" as const } : r))
+    );
+    setScheduling(null);
+  }
 
   function patch(id: string, status: string) {
     setActing((p) => ({ ...p, [id]: status }));
@@ -231,6 +251,14 @@ export function BookingRequestsClient({
 
   return (
     <div>
+      {scheduling && (
+        <ScheduleModal
+          request={scheduling}
+          onClose={() => setScheduling(null)}
+          onScheduled={onScheduled}
+        />
+      )}
+
       <CoachSwitcher items={items} active={active} onChange={setActive} />
 
       {mine.length === 0 ? (
@@ -255,6 +283,7 @@ export function BookingRequestsClient({
                     key={r.id}
                     r={r}
                     busy={acting[r.id]}
+                    onConfirm={setScheduling}
                     onPatch={patch}
                     onDelete={del}
                   />
@@ -285,6 +314,7 @@ export function BookingRequestsClient({
                       key={r.id}
                       r={r}
                       busy={acting[r.id]}
+                      onConfirm={setScheduling}
                       onPatch={patch}
                       onDelete={del}
                     />
@@ -316,6 +346,7 @@ export function BookingRequestsClient({
                       key={r.id}
                       r={r}
                       busy={acting[r.id]}
+                      onConfirm={setScheduling}
                       onPatch={patch}
                       onDelete={del}
                     />
