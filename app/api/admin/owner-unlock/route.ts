@@ -8,17 +8,17 @@ import {
   codeMatches,
   isGateConfigured,
   mintUnlockToken,
-} from "@/lib/bookingRequestsGate";
+} from "@/lib/ownerGate";
 
 export const dynamic = "force-dynamic";
 
-// POST { code } — unlock the booking requests page for 12 hours.
+// POST { code } — unlock the owner sections for 12 hours.
 export async function POST(req: NextRequest) {
   const err = await assertAdmin(req);
   if (err) return err;
 
   if (!isGateConfigured()) {
-    return new Response("BOOKING_REQUESTS_CODE is not configured.", { status: 500 });
+    return new Response("OWNER_CODE is not configured.", { status: 500 });
   }
 
   const body = (await req.json().catch(() => ({}))) as { code?: unknown };
@@ -29,9 +29,9 @@ export async function POST(req: NextRequest) {
     return new Response("Incorrect code.", { status: 403 });
   }
 
-  const token = mintUnlockToken();
+  const token = await mintUnlockToken();
   if (!token) {
-    return new Response("BOOKING_REQUESTS_CODE is not configured.", { status: 500 });
+    return new Response("OWNER_CODE is not configured.", { status: 500 });
   }
 
   const jar = await cookies();
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
   return new Response(null, { status: 204 });
 }
 
-// DELETE — lock the page again (the "Lock" button), without waiting out the 12 hours.
+// DELETE — lock the owner sections again (the "Lock" button), without waiting
+// out the 12 hours.
 export async function DELETE(req: NextRequest) {
   const err = await assertAdmin(req);
   if (err) return err;

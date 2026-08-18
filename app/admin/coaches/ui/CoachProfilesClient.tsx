@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Star, Trash2 } from "lucide-react";
+import Image from "next/image";
+import { useMemo, useRef, useState } from "react";
+import { ImagePlus, Plus, Star, Trash2 } from "lucide-react";
 import {
   isWholeHourBlock,
   scheduleToPeriodHours,
@@ -18,6 +19,7 @@ export type EditableCoach = {
   label: string;
   role: string | null;
   bio: string;
+  photoUrl: string | null;
   schedule: CoachSchedule;
   horizonMonths: number;
   locations: CoachLocation[];
@@ -60,11 +62,24 @@ function fromUi(periods: UiPeriod[]): CoachSchedule {
   return periods.map(({ start, end, days }): SchedulePeriod => ({ start, end, days }));
 }
 
+// Fallback monogram for a coach with no headshot yet.
+function initialsOf(label: string) {
+  return label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 function CoachCard({ initial }: { initial: EditableCoach }) {
   const [periods, setPeriods] = useState<UiPeriod[]>(() => toUi(initial.schedule));
   const [horizon, setHorizon] = useState(String(initial.horizonMonths));
   const [role, setRole] = useState(initial.role ?? "");
   const [bio, setBio] = useState(initial.bio);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(initial.photoUrl);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [locations, setLocations] = useState<UiLocation[]>(() =>
     initial.locations.map((l) => ({ ...l, uid: crypto.randomUUID() }))
   );
@@ -145,6 +160,35 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
     }));
   }
 
+  // Uploads the picked file straight away and swaps the preview. The URL is
+  // only written to the DB when the card is saved, which is also what deletes
+  // the photo this one replaces.
+  async function uploadPhoto(file: File) {
+    setUploading(true);
+    setError(null);
+    setStatus("idle");
+    try {
+      const form = new FormData();
+      form.append("slug", initial.slug);
+      form.append("file", file);
+      const res = await fetch("/api/admin/coaches/photo", { method: "POST", body: form });
+      if (!res.ok) {
+        setError((await res.text().catch(() => "")) || "Upload failed.");
+        setStatus("error");
+        return;
+      }
+      const data = (await res.json()) as { url?: string };
+      if (data.url) setPhotoUrl(data.url);
+    } catch {
+      setError("Network error while uploading. Please try again.");
+      setStatus("error");
+    } finally {
+      setUploading(false);
+      // Let the same file be re-picked after a failure.
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   async function save() {
     setStatus("saving");
     setError(null);
@@ -156,6 +200,7 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
           slug: initial.slug,
           bio,
           role,
+          photo_url: photoUrl,
           horizonMonths: Number(horizon),
           booking_schedule: fromUi(periods),
           booking_locations: locations.map(({ city, address, preferred }) => ({
@@ -332,6 +377,63 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
         )}
       </div>
 
+      {/* Profile photo */}
+      <div className="mb-4 mt-6">
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-500">
+          Profile photo{" "}
+          <span className="font-normal normal-case text-gray-400">
+            (saved with the card &mdash; max 8MB)
+          </span>
+        </label>
+        <div className="flex items-center gap-4">
+          {photoUrl ? (
+            <Image
+              src={photoUrl}
+              alt={initial.label}
+              width={96}
+              height={96}
+              unoptimized
+              className="h-24 w-24 shrink-0 rounded-full object-cover ring-1 ring-emerald-100"
+            />
+          ) : (
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-700">
+              {initialsOf(initial.label)}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadPhoto(file);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+            >
+              <ImagePlus className="h-4 w-4" />
+              {uploading ? "Uploading\u2026" : photoUrl ? "Replace photo" : "Upload photo"}
+            </button>
+            {photoUrl && !uploading && (
+              <button
+                type="button"
+                onClick={() => setPhotoUrl(null)}
+                title="Remove photo"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Role badge (optional) */}
       <div className="mb-4 mt-6">
         <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-500">
@@ -422,7 +524,7 @@ function CoachCard({ initial }: { initial: EditableCoach }) {
         <button
           type="button"
           onClick={() => void save()}
-          disabled={status === "saving" || hasErrors}
+          disabled={status === "saving" || uploading || hasErrors}
           className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
         >
           {status === "saving" ? "Saving…" : "Save changes"}

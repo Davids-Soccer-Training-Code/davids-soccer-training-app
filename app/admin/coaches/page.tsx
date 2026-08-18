@@ -20,6 +20,7 @@ export default async function AdminCoachesPage() {
     label: COACH_LABELS[slug],
     role: profiles[slug].role,
     bio: profiles[slug].bio ?? "",
+    photoUrl: profiles[slug].photoUrl,
     schedule: profiles[slug].schedule,
     horizonMonths: profiles[slug].horizonMonths,
     locations: profiles[slug].locations,

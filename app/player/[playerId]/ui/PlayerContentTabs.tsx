@@ -14,8 +14,7 @@ import {
 } from "lucide-react";
 import { PlayerInsights } from "./PlayerInsights";
 import { PlayerRank } from "./PlayerRank";
-import { RankLadder, RankBadge } from "./RankLadder";
-import { RANK_BY_KEY } from "@/lib/rankSystem";
+import { RankBreakdown } from "./RankBreakdown";
 import type { PlayerRankSummary } from "@/lib/getPlayerRank";
 import { PlayerGoals } from "./PlayerGoals";
 import { PlayerUploads } from "./PlayerUploads";
@@ -112,7 +111,6 @@ function PlayerDashboard({
       .then((d) => d && setRank(d.rank))
       .catch(() => {});
   }, [playerId]);
-
   useEffect(() => {
     Promise.all([
       fetch(`/api/players/${playerId}/goals`)
@@ -239,31 +237,10 @@ function PlayerDashboard({
           onClick={() => onNavigate("rank")}
           className="group mb-4 block w-full rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md"
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50">
-                <Trophy className="h-4 w-4 text-amber-600" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Current Rank
-                </div>
-                <div className="text-base font-bold text-gray-900 leading-tight">
-                  {RANK_BY_KEY[rank.overall.rank].name}
-                </div>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <RankBadge
-                name={RANK_BY_KEY[rank.overall.rank].shortName}
-                color={rank.overall.color}
-                size="sm"
-              />
-              <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <RankLadder currentIndex={rank.overall.index} />
+          <RankBreakdown rank={rank} />
+          <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-emerald-700">
+            See what&apos;s left to rank up
+            <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
           </div>
         </button>
       ) : null}

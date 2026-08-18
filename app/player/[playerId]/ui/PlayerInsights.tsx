@@ -7,6 +7,7 @@ import {
   isRankTest,
   mergeScoreHistory,
   RANK_BY_KEY,
+  rankLabel,
 } from "@/lib/rankSystem";
 import { RankBadge } from "./RankLadder";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1201,7 +1202,7 @@ export function PlayerInsights({
                     </div>
                     {testRank ? (
                       <RankBadge
-                        name={RANK_BY_KEY[testRank.rank].shortName}
+                        name={rankLabel(testRank.rank)}
                         color={RANK_BY_KEY[testRank.rank].color}
                         size="sm"
                       />

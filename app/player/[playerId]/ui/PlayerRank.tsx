@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trophy, Check, X, PlayCircle } from "lucide-react";
-import { RANK_TESTS, RANK_BY_KEY } from "@/lib/rankSystem";
+import { Check, X, PlayCircle } from "lucide-react";
+import { RANK_TESTS, RANK_BY_KEY, rankLabel } from "@/lib/rankSystem";
 import type { PlayerRankSummary, Mission } from "@/lib/getPlayerRank";
-import { RankLadder, RankBadge } from "./RankLadder";
+import { RankBadge } from "./RankLadder";
 
 function ChecklistRow({
   ok,
@@ -67,7 +67,7 @@ function MissionCard({ mission }: { mission: Mission }) {
             </p>
           ) : null}
         </div>
-        <RankBadge name={rank.shortName} color={rank.color} size="sm" />
+        <RankBadge name={rankLabel(rank)} color={rank.color} size="sm" />
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
         <span
@@ -144,7 +144,6 @@ export function PlayerRank({
     );
   }
 
-  const overallDef = RANK_BY_KEY[rank.overall.rank];
   const target = rank.next_checklist.targetRank
     ? RANK_BY_KEY[rank.next_checklist.targetRank]
     : null;
@@ -154,42 +153,14 @@ export function PlayerRank({
 
   return (
     <div className="space-y-6">
-      {/* Overall rank */}
-      <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50">
-              <Trophy className="h-5 w-5 text-amber-600" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Current rank
-              </div>
-              <div className="text-lg font-bold text-gray-900">
-                {overallDef.name}
-              </div>
-            </div>
-          </div>
-          <RankBadge name={overallDef.name} color={overallDef.color} size="lg" />
-        </div>
-        <div className="mt-4">
-          <RankLadder currentIndex={rank.overall.index} />
-        </div>
-        <p className="mt-4 text-xs leading-relaxed text-gray-500">
-          Black is the base rank everyone starts at. To rank up you must pass
-          every test for the next rank, hit the session minimum, and complete
-          that rank&apos;s coach mission.
-        </p>
-      </div>
-
       {/* Next-rank checklist */}
       {target ? (
         <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-gray-900">
-              How to reach {target.name}
+              How to reach {rankLabel(target)}
             </h3>
-            <RankBadge name={target.shortName} color={target.color} size="sm" />
+            <RankBadge name={rankLabel(target)} color={target.color} size="sm" />
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {rank.next_checklist.items.map((item) => (
@@ -207,7 +178,7 @@ export function PlayerRank({
           {targetMissions.length > 0 ? (
             <div className="mt-4">
               <div className="text-xs font-semibold text-gray-900">
-                {target.shortName} missions
+                {rankLabel(target)} missions
               </div>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 {targetMissions.map((m) => (
@@ -219,7 +190,7 @@ export function PlayerRank({
         </div>
       ) : (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-semibold text-emerald-800">
-          🏆 Master Rank reached — the top of the ladder. Incredible work!
+          🏆 Level 7 reached — the top of the ladder. Incredible work!
         </div>
       )}
 
@@ -227,8 +198,7 @@ export function PlayerRank({
       <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-bold text-gray-900">Rank by test</h3>
         <p className="mt-0.5 text-xs text-gray-500">
-          Each test ranks up on its own. You can be ahead in one area even if
-          your overall rank is lower.
+          Each test ranks up on its own.
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {RANK_TESTS.map((t) => {
@@ -242,13 +212,10 @@ export function PlayerRank({
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-gray-900">{t}</div>
                   <RankBadge
-                    name={RANK_BY_KEY[pt.rank].shortName}
+                    name={rankLabel(pt.rank)}
                     color={pt.color}
                     size="sm"
                   />
-                </div>
-                <div className="mt-3">
-                  <RankLadder currentIndex={pt.index} showLabels={false} />
                 </div>
               </div>
             );

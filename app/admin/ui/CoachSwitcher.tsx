@@ -3,7 +3,7 @@
 import type { CoachSlug } from "@/lib/bookingSchedule";
 
 // A single, polished coach toggle shared by the admin coach pages (Coach
-// Profiles and Coach Sessions) so they can never drift. A segmented pill
+// Profiles and Coach Calendar) so they can never drift. A segmented pill
 // control, mirroring the public booking switcher, with an optional count badge.
 
 export type CoachSwitcherItem = { slug: CoachSlug; label: string; count?: number };

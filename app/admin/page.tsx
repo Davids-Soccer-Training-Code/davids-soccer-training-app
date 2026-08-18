@@ -1,9 +1,36 @@
 import Link from "next/link";
 import Image from "next/image";
+import { Lock } from "lucide-react";
+
+import { hasOwnerAccess } from "@/lib/ownerGate.server";
+import { LockButton } from "./unlock/ui/OwnerGate";
 
 export const dynamic = "force-dynamic";
 
-const sections = [
+const coachSections = [
+  {
+    title: "Profiles",
+    description: "Edit each coach's booking availability and bio shown on the public calendar.",
+    href: "/admin/coaches",
+  },
+  {
+    title: "Calendar",
+    description: "See each coach's upcoming scheduled sessions at a glance.",
+    href: "/admin/coach-sessions",
+  },
+  {
+    title: "Players",
+    description: "Every player a coach trains, with package balances and session counts.",
+    href: "/admin/coach-players",
+  },
+  {
+    title: "Reminders",
+    description: "Reports, check-ins, photos and test data that are due.",
+    href: "/admin/reminders",
+  },
+];
+
+const ownerSections = [
   {
     title: "Players",
     description: "Search all players and open their full admin profile.",
@@ -30,28 +57,38 @@ const sections = [
     href: "/admin/challenges",
   },
   {
-    title: "Training Requests",
-    description: "View all training time requests submitted by parents.",
-    href: "/admin/training-requests",
-  },
-  {
     title: "Booking Requests",
     description: "Manage slot-specific session booking requests from the public calendar.",
     href: "/admin/booking-requests",
   },
-  {
-    title: "Coach Profiles",
-    description: "Edit each coach's booking availability and bio shown on the public calendar.",
-    href: "/admin/coaches",
-  },
-  {
-    title: "Coach Sessions",
-    description: "See each coach's upcoming scheduled sessions at a glance.",
-    href: "/admin/coach-sessions",
-  },
 ];
 
-export default function AdminPage() {
+function SectionCard({
+  title,
+  description,
+  href,
+}: {
+  title: string;
+  description: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+    >
+      <div className="text-lg font-semibold text-gray-900">{title}</div>
+      <p className="mt-2 text-sm text-gray-600">{description}</p>
+      <div className="mt-5 text-sm font-semibold text-emerald-700">
+        Open {title} -&gt;
+      </div>
+    </Link>
+  );
+}
+
+export default async function AdminPage() {
+  const unlocked = await hasOwnerAccess();
+
   return (
     <div className="min-h-screen bg-emerald-50">
       <header className="bg-linear-to-r from-emerald-600 to-emerald-700">
@@ -76,21 +113,45 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <div className="grid gap-5 md:grid-cols-3">
-          {sections.map((section) => (
-            <Link
-              key={section.href}
-              href={section.href}
-              className="group rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
-            >
-              <div className="text-lg font-semibold text-gray-900">{section.title}</div>
-              <p className="mt-2 text-sm text-gray-600">{section.description}</p>
-              <div className="mt-5 text-sm font-semibold text-emerald-700">
-                Open {section.title} -&gt;
-              </div>
-            </Link>
-          ))}
-        </div>
+        <section>
+          <h2 className="text-xl font-semibold text-gray-900">Coaches Admin</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Availability, bios, and scheduled sessions for each coach.
+          </p>
+          <div className="mt-5 grid gap-5 md:grid-cols-3">
+            {coachSections.map((section) => (
+              <SectionCard key={section.href} {...section} />
+            ))}
+          </div>
+        </section>
+
+        <hr className="my-10 border-emerald-200" />
+
+        <section>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Owner Admin</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                {unlocked
+                  ? "Unlocked for this browser. Lock when you hand the laptop over."
+                  : "Locked. Opening any of these asks for the owner code."}
+              </p>
+            </div>
+            {unlocked ? (
+              <LockButton />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-gray-500">
+                <Lock className="h-3.5 w-3.5" />
+                Locked
+              </span>
+            )}
+          </div>
+          <div className="mt-5 grid gap-5 md:grid-cols-3">
+            {ownerSections.map((section) => (
+              <SectionCard key={section.href} {...section} />
+            ))}
+          </div>
+        </section>
       </main>
     </div>
   );

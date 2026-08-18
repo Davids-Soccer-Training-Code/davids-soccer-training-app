@@ -21,19 +21,20 @@ export type RankKey =
 export type RankDef = {
   key: RankKey;
   index: number;
+  level: number; // 1-based, what players actually see ("Level 5")
   name: string; // full display name
   shortName: string;
   color: string; // hex, used for ladders / badges
 };
 
 export const RANKS: RankDef[] = [
-  { key: "black", index: 0, name: "Black Foundation", shortName: "Black", color: "#111827" },
-  { key: "green", index: 1, name: "Green Control", shortName: "Green", color: "#16a34a" },
-  { key: "red", index: 2, name: "Red Competitor", shortName: "Red", color: "#dc2626" },
-  { key: "blue", index: 3, name: "Blue Playmaker", shortName: "Blue", color: "#2563eb" },
-  { key: "platinum", index: 4, name: "Platinum Technician", shortName: "Platinum", color: "#94a3b8" },
-  { key: "diamond", index: 5, name: "Diamond Elite", shortName: "Diamond", color: "#38bdf8" },
-  { key: "master", index: 6, name: "Master Rank", shortName: "Master", color: "#7c3aed" },
+  { key: "black", index: 0, level: 1, name: "Black Foundation", shortName: "Black", color: "#111827" },
+  { key: "green", index: 1, level: 2, name: "Green Control", shortName: "Green", color: "#16a34a" },
+  { key: "red", index: 2, level: 3, name: "Red Competitor", shortName: "Red", color: "#dc2626" },
+  { key: "blue", index: 3, level: 4, name: "Blue Playmaker", shortName: "Blue", color: "#2563eb" },
+  { key: "platinum", index: 4, level: 5, name: "Platinum Technician", shortName: "Platinum", color: "#94a3b8" },
+  { key: "diamond", index: 5, level: 6, name: "Diamond Elite", shortName: "Diamond", color: "#38bdf8" },
+  { key: "master", index: 6, level: 7, name: "Master Rank", shortName: "Master", color: "#7c3aed" },
 ];
 
 // Ranks that must be earned, in progression order (Black is the base everyone starts at).
@@ -49,6 +50,13 @@ export const EARNED_RANKS: Exclude<RankKey, "black">[] = [
 export const RANK_BY_KEY: Record<RankKey, RankDef> = Object.fromEntries(
   RANKS.map((r) => [r.key, r])
 ) as Record<RankKey, RankDef>;
+
+// Players see levels, not the internal color names — the color still carries
+// through on badges, only the wording changes.
+export function rankLabel(rank: RankKey | RankDef): string {
+  const def = typeof rank === "string" ? RANK_BY_KEY[rank] : rank;
+  return `Level ${def.level}`;
+}
 
 export function getRank(key: RankKey): RankDef {
   return RANK_BY_KEY[key];
@@ -479,7 +487,7 @@ export function nextRankChecklist(args: {
     key: "mission",
     kind: "mission",
     label: "Coach Mission",
-    requirement: `Complete the ${target.shortName} coach mission`,
+    requirement: `Complete the ${rankLabel(target)} coach mission`,
     ok: missionOk,
     progress: missionOk ? 1 : 0,
   });

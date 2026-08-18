@@ -5,10 +5,11 @@ import {
   EARNED_RANKS,
   RANK_TESTS,
   RANK_BY_KEY,
+  rankLabel,
   type RankKey,
 } from "@/lib/rankSystem";
 import type { Mission, PlayerRankSummary } from "@/lib/getPlayerRank";
-import { RankLadder, RankBadge } from "@/app/player/[playerId]/ui/RankLadder";
+import { RankBadge } from "@/app/player/[playerId]/ui/RankLadder";
 
 async function api<T>(
   path: string,
@@ -169,26 +170,6 @@ export function AdminRankMissions({
         </div>
       ) : (
         <>
-          {/* Overall rank */}
-          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Overall rank
-              </div>
-              <RankBadge
-                name={RANK_BY_KEY[rank.overall.rank].name}
-                color={rank.overall.color}
-                size="sm"
-              />
-            </div>
-            <div className="mt-3">
-              <RankLadder currentIndex={rank.overall.index} />
-            </div>
-            <div className="mt-3 text-xs text-gray-500">
-              Sessions on record: {rank.session_count}
-            </div>
-          </div>
-
           {/* Per-test ranks */}
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {RANK_TESTS.map((t) => {
@@ -204,13 +185,10 @@ export function AdminRankMissions({
                       {t}
                     </div>
                     <RankBadge
-                      name={RANK_BY_KEY[pt.rank].shortName}
+                      name={rankLabel(pt.rank)}
                       color={pt.color}
                       size="sm"
                     />
-                  </div>
-                  <div className="mt-2">
-                    <RankLadder currentIndex={pt.index} showLabels={false} />
                   </div>
                 </div>
               );
@@ -235,7 +213,7 @@ export function AdminRankMissions({
                   >
                     {EARNED_RANKS.map((r) => (
                       <option key={r} value={r}>
-                        {RANK_BY_KEY[r].name}
+                        {rankLabel(r)}
                       </option>
                     ))}
                   </select>
@@ -330,7 +308,7 @@ export function AdminRankMissions({
                             ) : null}
                           </div>
                           <RankBadge
-                            name={RANK_BY_KEY[m.target_rank].shortName}
+                            name={rankLabel(m.target_rank)}
                             color={RANK_BY_KEY[m.target_rank].color}
                             size="sm"
                           />

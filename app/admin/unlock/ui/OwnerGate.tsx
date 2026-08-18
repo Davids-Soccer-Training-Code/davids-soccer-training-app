@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 
-// The locked state of /admin/booking-requests. No booking data has been
-// queried at this point — the server component renders this instead of the
-// list, so nothing sensitive reaches the browser until the code checks out.
-export function BookingRequestsGate() {
+// The locked state of the owner sections. Middleware redirects here before the
+// requested page runs, so none of its data has been queried at this point and
+// nothing sensitive reaches the browser until the code checks out.
+export function OwnerGate({ next }: { next: string }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,15 +19,15 @@ export function BookingRequestsGate() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/booking-requests/unlock", {
+      const res = await fetch("/api/admin/owner-unlock", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code }),
       });
       if (res.ok) {
         setCode("");
-        // The cookie is set; re-render the server component, which will now
-        // run the query and show the list.
+        // The cookie is set; middleware will let the original page through now.
+        router.replace(next);
         router.refresh();
         return;
       }
@@ -46,7 +46,7 @@ export function BookingRequestsGate() {
         <h2 className="text-lg font-semibold text-gray-900">Owner code required</h2>
       </div>
       <p className="mt-1 text-sm text-gray-600">
-        Booking requests are locked. Enter the owner code to unlock them for 12 hours.
+        The owner sections are locked. Enter the owner code to unlock them for 12 hours.
       </p>
 
       {error && (
@@ -82,8 +82,8 @@ export function BookingRequestsGate() {
   );
 }
 
-// Shown once unlocked, so access can be ended early instead of waiting out
-// the 12 hours (e.g. before handing the laptop to someone).
+// Shown on the dashboard once unlocked, so access can be ended early instead of
+// waiting out the 12 hours (e.g. before handing the laptop to a coach).
 export function LockButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -94,7 +94,7 @@ export function LockButton() {
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        await fetch("/api/admin/booking-requests/unlock", { method: "DELETE" }).catch(() => {});
+        await fetch("/api/admin/owner-unlock", { method: "DELETE" }).catch(() => {});
         setBusy(false);
         router.refresh();
       }}

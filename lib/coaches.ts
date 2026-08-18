@@ -23,6 +23,7 @@ type StaffRow = {
   booking_schedule: unknown;
   booking_horizon_months: number | null;
   booking_locations: unknown;
+  photo_url: string | null;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -120,7 +121,8 @@ function scheduleOrDefault(slug: CoachSlug, raw: unknown): CoachSchedule {
 
 async function fetchStaffBySlug(): Promise<Map<string, StaffRow>> {
   const rows = (await sql`
-    SELECT slug, booking_bio, booking_role, booking_schedule, booking_horizon_months, booking_locations
+    SELECT slug, booking_bio, booking_role, booking_schedule, booking_horizon_months,
+           booking_locations, photo_url
     FROM crm_staff
     WHERE slug IS NOT NULL
   `) as unknown as StaffRow[];
@@ -137,6 +139,7 @@ export async function getCoachProfiles(): Promise<Record<CoachSlug, CoachProfile
       slug,
       bio: row?.booking_bio ?? null,
       role: row?.booking_role ?? null,
+      photoUrl: row?.photo_url?.trim() || null,
       schedule: scheduleOrDefault(slug, row?.booking_schedule),
       horizonMonths: sanitizeHorizon(row?.booking_horizon_months),
       locations: sanitizeLocations(row?.booking_locations),

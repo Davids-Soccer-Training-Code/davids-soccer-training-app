@@ -258,6 +258,7 @@ export type CoachProfile = {
   slug: CoachSlug;
   bio: string | null;
   role: string | null;
+  photoUrl: string | null;
   schedule: CoachSchedule;
   horizonMonths: number;
   locations: CoachLocation[];
