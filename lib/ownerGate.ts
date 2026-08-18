@@ -47,6 +47,8 @@ const OPEN_API_SUBTREES = [
   "/api/admin/verify",
   "/api/admin/players",
   "/api/admin/reminders",
+  // The shirt/photo checkboxes on the coach roster, which is already open.
+  "/api/admin/coach-players",
 ];
 
 function inSubtree(pathname: string, roots: string[]): boolean {

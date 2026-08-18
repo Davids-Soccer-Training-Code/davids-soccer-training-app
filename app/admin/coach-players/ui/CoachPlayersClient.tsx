@@ -27,6 +27,10 @@ export type CoachPlayer = {
   crmPlayerId: number;
   // The app account uuid, or null when this CRM player has no account yet.
   appId: string | null;
+  // Kit handed over, and a photo taken with any coach. Tracked per player, not
+  // per coach — the same shirt and the same photo count on every roster.
+  hasShirt: boolean;
+  hasPhoto: boolean;
   name: string;
   parentName: string | null;
   parentAppId: string | null;
@@ -86,7 +90,76 @@ function PackageBar({ pkg }: { pkg: CoachPlayerPackage }) {
   );
 }
 
+/**
+ * One tick box on a player card. Flips immediately and rolls back if the save
+ * fails, so a coach working down a roster is never waiting on the network.
+ */
+function CheckItem({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+        checked
+          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+      } ${disabled ? "opacity-50" : ""}`}
+    >
+      <input
+        type="checkbox"
+        className="h-3.5 w-3.5 accent-emerald-600"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
+  );
+}
+
 function PlayerCard({ p }: { p: CoachPlayer }) {
+  const [hasShirt, setHasShirt] = useState(p.hasShirt);
+  const [hasPhoto, setHasPhoto] = useState(p.hasPhoto);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  function save(patch: { hasShirt?: boolean; hasPhoto?: boolean }) {
+    const prevShirt = hasShirt;
+    const prevPhoto = hasPhoto;
+    if (patch.hasShirt !== undefined) setHasShirt(patch.hasShirt);
+    if (patch.hasPhoto !== undefined) setHasPhoto(patch.hasPhoto);
+    setSaving(true);
+    setFailed(false);
+
+    void fetch(`/api/admin/coach-players/${p.crmPlayerId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+      .then((res) => {
+        if (res.ok) return;
+        // Put the box back where it was rather than leaving a tick that never
+        // actually saved.
+        setHasShirt(prevShirt);
+        setHasPhoto(prevPhoto);
+        setFailed(true);
+      })
+      .catch(() => {
+        setHasShirt(prevShirt);
+        setHasPhoto(prevPhoto);
+        setFailed(true);
+      })
+      .finally(() => setSaving(false));
+  }
+
   return (
     <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -163,6 +236,22 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
       </div>
 
       {p.pkg && <PackageBar pkg={p.pkg} />}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <CheckItem
+          label="Shirt"
+          checked={hasShirt}
+          disabled={saving}
+          onChange={(next) => save({ hasShirt: next })}
+        />
+        <CheckItem
+          label="Photo with coach"
+          checked={hasPhoto}
+          disabled={saving}
+          onChange={(next) => save({ hasPhoto: next })}
+        />
+        {failed && <span className="text-xs font-medium text-red-600">Didn&apos;t save</span>}
+      </div>
 
       {/* The session count already leads the card when there's no package, so
           the footer doesn't repeat it there. */}
