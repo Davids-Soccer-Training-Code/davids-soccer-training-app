@@ -16,6 +16,9 @@ type Row = {
   app_id: string | null;
   parent_name: string | null;
   parent_app_id: string | null;
+  parent_phone: string | null;
+  parent_email: string | null;
+  second_parent_name: string | null;
   with_coach: number;
   last_session: string;
   upcoming: number;
@@ -103,6 +106,12 @@ export default async function CoachPlayersPage() {
       app.id          AS app_id,
       p.name          AS parent_name,
       pa.id           AS parent_app_id,
+      -- The CRM is where a parent's number actually gets kept up to date, so it
+      -- wins; the app account is the fallback for families added through
+      -- signup rather than through the CRM.
+      COALESCE(NULLIF(btrim(p.phone), ''), NULLIF(btrim(pa.phone), '')) AS parent_phone,
+      COALESCE(NULLIF(btrim(p.email), ''), NULLIF(btrim(pa.email), '')) AS parent_email,
+      NULLIF(btrim(p.secondary_parent_name), '') AS second_parent_name,
       count(*) FILTER (WHERE a.is_past)::int AS with_coach,
       to_char((max(a.session_date) FILTER (WHERE a.is_past))::timestamptz
                 AT TIME ZONE 'America/Phoenix', 'YYYY-MM-DD') AS last_session,
@@ -127,6 +136,7 @@ export default async function CoachPlayersPage() {
     LEFT JOIN used u ON u.package_id = pk.id
     LEFT JOIN player_checklist pc ON pc.crm_player_id = pl.id
     GROUP BY a.coach, pl.id, pl.name, pl.parent_id, app.id, p.name, pa.id,
+             p.phone, p.email, p.secondary_parent_name, pa.phone, pa.email,
              pk.package_type, pk.total_sessions, u.done, u.booked,
              pc.has_shirt, pc.has_photo
     -- Roster stays "players this coach has actually trained": a booked-only
@@ -164,6 +174,9 @@ export default async function CoachPlayersPage() {
       name: r.name,
       parentName: r.parent_name,
       parentAppId: r.parent_app_id,
+      parentPhone: r.parent_phone,
+      parentEmail: r.parent_email,
+      secondParentName: r.second_parent_name,
       withCoach: r.with_coach,
       lastSession: r.last_session,
       upcoming: r.upcoming,

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Mail, Phone, Search, Users } from "lucide-react";
 
 import type { CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
@@ -34,6 +34,11 @@ export type CoachPlayer = {
   name: string;
   parentName: string | null;
   parentAppId: string | null;
+  // Contact details live on the card because /admin/parent is owner-only — a
+  // coach following the parent link just hits the unlock screen.
+  parentPhone: string | null;
+  parentEmail: string | null;
+  secondParentName: string | null;
   withCoach: number;
   lastSession: string; // YYYY-MM-DD (Arizona)
   // Sessions booked with this coach that haven't happened yet.
@@ -65,6 +70,41 @@ function fmtList(names: string[]): string {
 
 function fmtPackage(type: string): string {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Numbers come from two places with no agreed format — the CRM stores whatever
+// was typed in, the app stores bare digits. Display a US 10-digit number the
+// familiar way and leave anything else (extensions, international) alone.
+function fmtPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (ten.length !== 10) return raw;
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+// Everything a coach might type to find a player: their name, either parent,
+// and the contact details themselves — phone digits with the punctuation
+// stripped, so "6025551234" matches a number stored as "(602) 555-1234".
+function haystack(p: CoachPlayer): string {
+  return [
+    p.name,
+    p.parentName ?? "",
+    p.secondParentName ?? "",
+    p.parentEmail ?? "",
+    p.parentPhone ?? "",
+    (p.parentPhone ?? "").replace(/\D/g, ""),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function matches(p: CoachPlayer, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = haystack(p);
+  // Every word has to land somewhere, so "jack 602" narrows instead of
+  // widening the way a plain substring search would.
+  return q.split(/\s+/).every((word) => hay.includes(word));
 }
 
 // Package progress: delivered sessions solid, booked-but-not-yet-run in a
@@ -122,6 +162,41 @@ function CheckItem({
       />
       {label}
     </label>
+  );
+}
+
+/**
+ * The parent's phone and email, right on the card. The parent link above goes
+ * to /admin/parent, which is owner-only — so for a coach it's a locked door.
+ * These are real links, not text, so a coach on a phone can tap to call or
+ * text without copying digits by hand.
+ */
+function ContactRow({ p }: { p: CoachPlayer }) {
+  if (!p.parentPhone && !p.parentEmail) {
+    return (
+      <div className="mt-1.5 text-xs text-gray-400">No contact details on file</div>
+    );
+  }
+
+  const chip =
+    "inline-flex max-w-full items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800";
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {p.parentPhone && (
+        // The href keeps the raw digits; only the label is prettied up.
+        <a href={`tel:${p.parentPhone.replace(/[^\d+]/g, "")}`} className={chip}>
+          <Phone className="h-3.5 w-3.5 shrink-0" />
+          {fmtPhone(p.parentPhone)}
+        </a>
+      )}
+      {p.parentEmail && (
+        <a href={`mailto:${p.parentEmail}`} className={chip}>
+          <Mail className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{p.parentEmail}</span>
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -185,7 +260,11 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
             ) : (
               p.parentName
             )}
+            {p.secondParentName && (
+              <span className="text-gray-500"> &amp; {p.secondParentName}</span>
+            )}
           </div>
+          <ContactRow p={p} />
           {p.upcoming > 0 && p.nextSession && (
             <div className="mt-1 text-xs font-semibold text-emerald-700">
               Next session {fmtDate(p.nextSession)}
@@ -301,19 +380,71 @@ function Group({
 
 export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
   const [active, setActive] = useState<CoachSlug>(coaches[0]?.slug ?? "david");
+  const [query, setQuery] = useState("");
   const current = coaches.find((c) => c.slug === active) ?? coaches[0];
 
-  const players = current?.players ?? [];
+  // While searching, the tab badges count matches instead of roster size — a
+  // coach who searches a player they've never trained can see at a glance
+  // which coach does have them, rather than checking every tab by hand.
+  const counts = useMemo(
+    () =>
+      new Map(
+        coaches.map((c) => [c.slug, c.players.filter((p) => matches(p, query)).length])
+      ),
+    [coaches, query]
+  );
+
+  const players = useMemo(
+    () => (current?.players ?? []).filter((p) => matches(p, query)),
+    [current, query]
+  );
+
+  const searching = query.trim().length > 0;
   const inProgram = players.filter((p) => p.active);
   const outOfProgram = players.filter((p) => !p.active);
+  // Where else this player turned up, so a fruitless search on one tab points
+  // at the tab that does have them.
+  const elsewhere = searching
+    ? coaches.filter((c) => c.slug !== active && (counts.get(c.slug) ?? 0) > 0)
+    : [];
 
   return (
     <div>
       <CoachSwitcher
-        items={coaches.map((c) => ({ slug: c.slug, label: c.label, count: c.players.length }))}
+        items={coaches.map((c) => ({
+          slug: c.slug,
+          label: c.label,
+          count: counts.get(c.slug) ?? 0,
+        }))}
         active={active}
         onChange={setActive}
       />
+
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            type="search"
+            placeholder="Search player, parent, phone, or email..."
+            aria-label="Search players"
+            className="w-full rounded-xl border border-emerald-200 bg-white py-2 pl-9 pr-3 text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+          />
+        </div>
+        {searching && (
+          <p className="mt-2 text-xs text-gray-500">
+            {players.length} match{players.length === 1 ? "" : "es"} on{" "}
+            {current?.label ?? "this coach"}
+            {elsewhere.length > 0 && (
+              <>
+                {" · also "}
+                {elsewhere.map((c) => `${c.label} (${counts.get(c.slug)})`).join(", ")}
+              </>
+            )}
+          </p>
+        )}
+      </div>
 
       {!current || current.players.length === 0 ? (
         <div className="rounded-3xl border border-emerald-200 bg-white p-10 text-center">
@@ -321,6 +452,27 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
           <p className="mt-3 text-sm text-gray-600">
             No players trained by this coach yet.
           </p>
+        </div>
+      ) : players.length === 0 ? (
+        <div className="rounded-3xl border border-emerald-200 bg-white p-10 text-center">
+          <Search className="mx-auto h-10 w-10 text-gray-300" />
+          <p className="mt-3 text-sm text-gray-600">
+            No player matches &ldquo;{query.trim()}&rdquo; on this coach&apos;s roster.
+          </p>
+          {elsewhere.length > 0 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {elsewhere.map((c) => (
+                <button
+                  key={c.slug}
+                  type="button"
+                  onClick={() => setActive(c.slug)}
+                  className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300"
+                >
+                  {c.label} ({counts.get(c.slug)})
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <>
