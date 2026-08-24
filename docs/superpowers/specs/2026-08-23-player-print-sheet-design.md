@@ -65,7 +65,13 @@ another bar to clear.
 ### Test History
 
 Per rank test: first, previous, and latest reading, with dates and the delta
-since the previous reading.
+since the previous reading. Readings carry **one value per condition, exactly
+as the BEST column does** — `4/3` then `4/4`, with a per-condition change of
+`0/+1`. One foot can be climbing while the other slides, and a single collapsed
+number hides that.
+
+A session is included when *any* condition was recorded, so a day where only
+one foot was measured still shows up.
 
 Different levels of the same test are measured on **entirely different fields**
 (Dribbling green/red read figure-8 loops, blue reads cross-dribble). So the row
