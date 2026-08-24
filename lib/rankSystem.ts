@@ -288,6 +288,37 @@ export function requirementProgress(req: RankRequirement, s: Scores): number {
   return worst;
 }
 
+// A single condition's current reading against what the rank asks for. The
+// print sheet needs the raw numbers ("12 of 18"), not just the 0..1 ratio.
+export type RequirementReading = {
+  current: number | null;
+  min: number;
+  ratio: number;
+};
+
+export function requirementReadings(
+  req: RankRequirement,
+  s: Scores
+): RequirementReading[] {
+  return req.conditions.map((c) => {
+    const current = c.value(s);
+    const ratio =
+      c.min <= 0 ? 1 : Math.max(0, Math.min(1, (current ?? 0) / c.min));
+    return { current, min: c.min, ratio };
+  });
+}
+
+// The condition the player is furthest from — the one worth showing, since a
+// requirement only passes when every condition does.
+export function weakestRequirementReading(
+  req: RankRequirement,
+  s: Scores
+): RequirementReading | null {
+  const readings = requirementReadings(req, s);
+  if (!readings.length) return null;
+  return readings.reduce((worst, r) => (r.ratio < worst.ratio ? r : worst));
+}
+
 export function testRankProgress(
   testName: string,
   rank: Exclude<RankKey, "black">,

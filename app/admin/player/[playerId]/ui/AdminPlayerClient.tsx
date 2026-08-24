@@ -444,6 +444,35 @@ export default function AdminPlayerClient(props: {
     localStorage.setItem("adminSecurityCode", code);
   }
 
+  const [printing, setPrinting] = useState(false);
+
+  // The PDF route is admin-gated by header, so it cannot be a plain link —
+  // fetch it with the code and hand the browser a blob URL instead.
+  async function openPrintSheet() {
+    if (!playerId || printing) return;
+    setPrinting(true);
+    setErrMsg(null);
+    try {
+      const res = await fetch(`/api/admin/players/${playerId}/print`, {
+        headers: securityCode ? { "x-security-code": securityCode } : {},
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        throw new Error((await res.text()) || `Request failed: ${res.status}`);
+      }
+      const url = URL.createObjectURL(await res.blob());
+      window.open(url, "_blank", "noopener,noreferrer");
+      // Give the new tab time to claim the blob before revoking it.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErrMsg(
+        e instanceof Error ? e.message : "Could not build the print sheet.",
+      );
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   async function loadPlayer(code: string, id: string) {
     const data = await api<{ player: Player }>(`/api/admin/players/${id}`, {
       method: "GET",
@@ -835,6 +864,32 @@ export default function AdminPlayerClient(props: {
             >
               ← Players
             </Link>
+            {authorized && playerId && (
+              <button
+                type="button"
+                onClick={openPrintSheet}
+                disabled={printing}
+                className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50 disabled:opacity-60"
+                title="One-page A4 coaching sheet"
+              >
+                <span className="flex items-center gap-2">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                    />
+                  </svg>
+                  {printing ? "Building…" : "Print Sheet"}
+                </span>
+              </button>
+            )}
             {authorized && playerId && (
               <Link
                 href={`/admin/player/${playerId}/preview`}
