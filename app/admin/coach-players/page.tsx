@@ -184,6 +184,7 @@ export default async function CoachPlayersPage() {
       // A booked session ahead counts as being in the program, even if the last
       // one was more than six weeks ago.
       active: r.recent || r.upcoming > 0,
+      recent: r.recent,
       pkg:
         r.package_type && r.total_sessions != null
           ? {

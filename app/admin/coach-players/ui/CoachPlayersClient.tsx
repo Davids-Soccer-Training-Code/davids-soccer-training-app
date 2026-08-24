@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Mail, Phone, Search, Users } from "lucide-react";
+import { ClipboardList, Mail, Phone, Printer, Search, Users } from "lucide-react";
 
 import type { CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
@@ -46,6 +46,9 @@ export type CoachPlayer = {
   nextSession: string | null; // YYYY-MM-DD (Arizona)
   // Trained in the last six weeks, or has something booked ahead.
   active: boolean;
+  // Trained in the last six weeks. `active` also counts booked-ahead players,
+  // but only these end up on the printed score card.
+  recent: boolean;
   pkg: CoachPlayerPackage | null;
   // Labels of the other coaches who have also trained this player. Empty when
   // this coach is the only one.
@@ -330,6 +333,21 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
           onChange={(next) => save({ hasPhoto: next })}
         />
         {failed && <span className="text-xs font-medium text-red-600">Didn&apos;t save</span>}
+        {/* Same one-page coaching sheet as the player admin page. This page is
+            session-authenticated, so it can be a plain link rather than the
+            security-code fetch the standalone player page needs. */}
+        {p.appId && (
+          <a
+            href={`/api/admin/players/${p.appId}/print`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="One-page A4 coaching sheet"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Print sheet
+          </a>
+        )}
       </div>
 
       {/* The session count already leads the card when there's no package, so
@@ -399,6 +417,14 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
     [current, query]
   );
 
+  // What the printed score card will actually contain: trained recently, not
+  // merely booked ahead. Kept off `query` so the badge doesn't move while the
+  // coach is searching.
+  const recentCount = useMemo(
+    () => (current?.players ?? []).filter((p) => p.recent).length,
+    [current]
+  );
+
   const searching = query.trim().length > 0;
   const inProgram = players.filter((p) => p.active);
   const outOfProgram = players.filter((p) => !p.active);
@@ -421,16 +447,34 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
       />
 
       <div className="mb-6">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            type="search"
-            placeholder="Search player, parent, phone, or email..."
-            aria-label="Search players"
-            className="w-full rounded-xl border border-emerald-200 bg-white py-2 pl-9 pr-3 text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              type="search"
+              placeholder="Search player, parent, phone, or email..."
+              aria-label="Search players"
+              className="w-full rounded-xl border border-emerald-200 bg-white py-2 pl-9 pr-3 text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
+            />
+          </div>
+          {/* One printable page of blank score cells for everyone this coach
+              has trained in the last six weeks. */}
+          <a
+            href={`/api/admin/coach-players/score-card?coach=${active}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            <ClipboardList className="h-4 w-4" />
+            Score card
+            {recentCount > 0 && (
+              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs font-bold">
+                {recentCount}
+              </span>
+            )}
+          </a>
         </div>
         {searching && (
           <p className="mt-2 text-xs text-gray-500">
