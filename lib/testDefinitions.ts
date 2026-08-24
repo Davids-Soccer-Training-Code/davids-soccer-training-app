@@ -98,7 +98,6 @@ export const TEST_DEFINITIONS: TestDefinition[] = [
     fields: [
       numField("skill_moves_count", "Different moves executed"),
       numField("skill_combos_count", "Combos executed"),
-      numField("skill_live_app_pct", "Live application %"),
       {
         key: "skill_move_names",
         label: "Move names (comma-separated)",
@@ -116,7 +115,7 @@ export const TEST_DEFINITIONS: TestDefinition[] = [
       numField("shoot_bottom_moving", "Bottom corners — moving ball, top of 18 (of 15)"),
       numField("shoot_4corners_pen", "All-4 corners hit once — penalty spot (of 4)"),
       numField("shoot_4corners_top18", "All-4 corners hit once — top of 18 (of 4)"),
-      numField("shoot_4corners_moving", "Corners hit twice — moving ball (of 4)"),
+      numField("shoot_4corners_moving", "All-4 corners hit once — moving ball (of 4)"),
     ],
   },
   {
@@ -124,10 +123,9 @@ export const TEST_DEFINITIONS: TestDefinition[] = [
     name: "First Touch",
     isRankTest: true,
     fields: [
-      numField("ft_ground_5x5_yards", "Ground, 5x5 box — max distance reached (yds)"),
-      numField("ft_ground_3x3_1touch_yards", "Ground, 3x3, 1-touch — max distance (yds)"),
-      numField("ft_aerial_3x3_yards", "Aerial, 3x3 box — max distance reached (yds)"),
-      numField("ft_aerial_3x3_1touch_yards", "Aerial, 3x3, 1-touch — max distance (yds)"),
+      numField("ft_ground_5x5_yards", "Ground, 5x5 box, 1 touch — max distance (yds)"),
+      numField("ft_ground_3x3_paced_yards", "Ground, 3x3, 1 touch, faster-paced ball — max distance (yds)"),
+      numField("ft_aerial_3x3_yards", "Aerial, 3x3 box, 1 touch — max distance (yds)"),
     ],
   },
 

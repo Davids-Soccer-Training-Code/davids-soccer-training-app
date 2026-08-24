@@ -31,13 +31,12 @@ export type Mission = {
 export type PerTestRank = {
   rank: RankKey;
   index: number;
-  name: string;
   color: string;
   passed_by_rank: Record<RankKey, boolean>;
 };
 
 export type PlayerRankSummary = {
-  overall: { rank: RankKey; index: number; name: string; color: string };
+  overall: { rank: RankKey; index: number; color: string };
   per_test: Record<string, PerTestRank>;
   session_count: number;
   mission_done_by_rank: Record<RankKey, boolean>;
@@ -101,7 +100,6 @@ export async function getPlayerRank(
     per_test[t] = {
       rank: res.rank,
       index: res.rankIndex,
-      name: def.name,
       color: def.color,
       passed_by_rank: res.passedByRank,
     };
@@ -130,7 +128,6 @@ export async function getPlayerRank(
     overall: {
       rank: overall.rank,
       index: overall.rankIndex,
-      name: overallDef.name,
       color: overallDef.color,
     },
     per_test,

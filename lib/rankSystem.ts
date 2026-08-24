@@ -1,4 +1,9 @@
-// Rank system: Black → Green → Red → Blue → Platinum → Diamond → Master.
+// Rank system: Level 1 → Level 7.
+//
+// Players only ever see level numbers. The color-word keys ("green", "red", ...)
+// are internal identifiers only — they are persisted in the DB
+// (player_missions.target_rank, the cached profile ranks blob), so they stay, but
+// nothing renders them. Each rank still carries a `color` for badges and banners.
 //
 // Single source of truth for the rank ladder, per-test rank requirements, and the
 // pure functions that auto-derive a player's rank from the scores the coach enters.
@@ -21,20 +26,18 @@ export type RankKey =
 export type RankDef = {
   key: RankKey;
   index: number;
-  level: number; // 1-based, what players actually see ("Level 5")
-  name: string; // full display name
-  shortName: string;
+  level: number; // 1-based, and the only thing players ever see ("Level 5")
   color: string; // hex, used for ladders / badges
 };
 
 export const RANKS: RankDef[] = [
-  { key: "black", index: 0, level: 1, name: "Black Foundation", shortName: "Black", color: "#111827" },
-  { key: "green", index: 1, level: 2, name: "Green Control", shortName: "Green", color: "#16a34a" },
-  { key: "red", index: 2, level: 3, name: "Red Competitor", shortName: "Red", color: "#dc2626" },
-  { key: "blue", index: 3, level: 4, name: "Blue Playmaker", shortName: "Blue", color: "#2563eb" },
-  { key: "platinum", index: 4, level: 5, name: "Platinum Technician", shortName: "Platinum", color: "#94a3b8" },
-  { key: "diamond", index: 5, level: 6, name: "Diamond Elite", shortName: "Diamond", color: "#38bdf8" },
-  { key: "master", index: 6, level: 7, name: "Master Rank", shortName: "Master", color: "#7c3aed" },
+  { key: "black", index: 0, level: 1, color: "#111827" },
+  { key: "green", index: 1, level: 2, color: "#16a34a" },
+  { key: "red", index: 2, level: 3, color: "#dc2626" },
+  { key: "blue", index: 3, level: 4, color: "#2563eb" },
+  { key: "platinum", index: 4, level: 5, color: "#94a3b8" },
+  { key: "diamond", index: 5, level: 6, color: "#38bdf8" },
+  { key: "master", index: 6, level: 7, color: "#7c3aed" },
 ];
 
 // Ranks that must be earned, in progression order (Black is the base everyone starts at).
@@ -200,8 +203,8 @@ export const REQUIREMENTS: Record<RankTestName, TestRequirements> = {
   Dribbling: {
     green: { label: "6 figure-8 loops (strong/weak/both)", conditions: cEach(FIG8, 6) },
     red: { label: "7.5 figure-8 loops (strong/weak/both)", conditions: cEach(FIG8, 7.5) },
-    blue: { label: "15 cross-dribble loops (strong/weak/both)", conditions: cEach(CROSS, 15) },
-    platinum: { label: "20 cross-dribble loops (strong/weak/both)", conditions: cEach(CROSS, 20) },
+    blue: { label: "12 cross-dribble loops (strong/weak/both)", conditions: cEach(CROSS, 12) },
+    platinum: { label: "15 cross-dribble loops (strong/weak/both)", conditions: cEach(CROSS, 15) },
     diamond: { label: "4.00+ obstacle shuttle sets (strong/weak/both)", conditions: cEach(OBST, 4) },
     master: { label: "6.00+ obstacle shuttle sets (strong/weak/both)", conditions: cEach(OBST, 6) },
   },
@@ -219,31 +222,31 @@ export const REQUIREMENTS: Record<RankTestName, TestRequirements> = {
   },
   Distance: {
     green: distanceReq(15, 12), red: distanceReq(21, 18), blue: distanceReq(25, 20),
-    platinum: distanceReq(30, 30), diamond: distanceReq(35, 35), master: distanceReq(40, 40),
+    platinum: distanceReq(28, 28), diamond: distanceReq(31, 31), master: distanceReq(34, 34),
   },
   "Skill Moves": {
     green: { label: "4 different moves each foot", conditions: [cNum("skill_moves_count", 4)] },
     red: { label: "8 different moves", conditions: [cNum("skill_moves_count", 8)] },
-    blue: { label: "12 moves + live application 75%+", conditions: [cNum("skill_moves_count", 12), cNum("skill_live_app_pct", 75)] },
+    blue: { label: "12 different moves", conditions: [cNum("skill_moves_count", 12)] },
     platinum: { label: "12 moves + 4 combos", conditions: [cNum("skill_moves_count", 12), cNum("skill_combos_count", 4)] },
-    diamond: { label: "12 moves + 8 combos + live 75%+", conditions: [cNum("skill_moves_count", 12), cNum("skill_combos_count", 8), cNum("skill_live_app_pct", 75)] },
-    master: { label: "12 moves + 12 combos + live 75%+", conditions: [cNum("skill_moves_count", 12), cNum("skill_combos_count", 12), cNum("skill_live_app_pct", 75)] },
+    diamond: { label: "12 moves + 8 combos", conditions: [cNum("skill_moves_count", 12), cNum("skill_combos_count", 8)] },
+    master: { label: "12 moves + 12 combos", conditions: [cNum("skill_moves_count", 12), cNum("skill_combos_count", 12)] },
   },
   "Shooting Accuracy": {
-    green: { label: "Bottom corners 6× — penalty/inside box (10 balls)", conditions: [cNum("shoot_bottom_pen", 6)] },
-    red: { label: "Bottom corners 6× — top of 18 (10 balls)", conditions: [cNum("shoot_bottom_top18", 6)] },
-    blue: { label: "Bottom corners 8× — moving ball, top of 18 (15 balls)", conditions: [cNum("shoot_bottom_moving", 8)] },
+    green: { label: "Bottom corners 5× — penalty/inside box (10 balls)", conditions: [cNum("shoot_bottom_pen", 5)] },
+    red: { label: "Bottom corners 5× — top of 18 (10 balls)", conditions: [cNum("shoot_bottom_top18", 5)] },
+    blue: { label: "Bottom corners 6× — moving ball, top of 18 (15 balls)", conditions: [cNum("shoot_bottom_moving", 6)] },
     platinum: { label: "All 4 corners once — penalty spot (10 balls)", conditions: [cNum("shoot_4corners_pen", 4)] },
     diamond: { label: "All 4 corners once — top of 18 (10 balls)", conditions: [cNum("shoot_4corners_top18", 4)] },
-    master: { label: "All 4 corners twice — moving ball (15 balls)", conditions: [cNum("shoot_4corners_moving", 4)] },
+    master: { label: "All 4 corners once — moving ball (15 balls)", conditions: [cNum("shoot_4corners_moving", 4)] },
   },
   "First Touch": {
-    green: { label: "5x5 box, ground, reach 15 yds (max 3 touches)", conditions: [cNum("ft_ground_5x5_yards", 15)] },
-    red: { label: "5x5 box, ground, reach 20 yds (max 3 touches)", conditions: [cNum("ft_ground_5x5_yards", 20)] },
-    blue: { label: "3x3 box, ground, reach 25 yds (1 touch)", conditions: [cNum("ft_ground_3x3_1touch_yards", 25)] },
-    platinum: { label: "3x3 box, aerial, reach 10 yds (max 3 touches)", conditions: [cNum("ft_aerial_3x3_yards", 10)] },
-    diamond: { label: "3x3 box, aerial, reach 15 yds (max 3 touches)", conditions: [cNum("ft_aerial_3x3_yards", 15)] },
-    master: { label: "3x3 box, aerial, reach 20 yds (1 touch)", conditions: [cNum("ft_aerial_3x3_1touch_yards", 20)] },
+    green: { label: "5x5 box, ground, reach 15 yds (1 touch)", conditions: [cNum("ft_ground_5x5_yards", 15)] },
+    red: { label: "5x5 box, ground, reach 20 yds (1 touch)", conditions: [cNum("ft_ground_5x5_yards", 20)] },
+    blue: { label: "3x3 box, ground, reach 20 yds (1 touch, faster-paced ball)", conditions: [cNum("ft_ground_3x3_paced_yards", 20)] },
+    platinum: { label: "3x3 box, aerial, reach 10 yds (1 touch)", conditions: [cNum("ft_aerial_3x3_yards", 10)] },
+    diamond: { label: "3x3 box, aerial, reach 15 yds (1 touch)", conditions: [cNum("ft_aerial_3x3_yards", 15)] },
+    master: { label: "3x3 box, aerial, reach 20 yds (1 touch)", conditions: [cNum("ft_aerial_3x3_yards", 20)] },
   },
 };
 
@@ -333,7 +336,6 @@ export const RANK_TEST_FIELD_TIERS: Record<string, Record<string, number>> = {
   },
   "Skill Moves": {
     skill_moves_count: 1,
-    skill_live_app_pct: 3,
     skill_combos_count: 4,
   },
   "Shooting Accuracy": {
@@ -346,9 +348,8 @@ export const RANK_TEST_FIELD_TIERS: Record<string, Record<string, number>> = {
   },
   "First Touch": {
     ft_ground_5x5_yards: 1,
-    ft_ground_3x3_1touch_yards: 3,
+    ft_ground_3x3_paced_yards: 3,
     ft_aerial_3x3_yards: 4,
-    ft_aerial_3x3_1touch_yards: 6,
   },
 };
 

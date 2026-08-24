@@ -414,12 +414,6 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
       description: "Combos executed (Platinum+).",
       valueFmt: fmtInt,
     },
-    {
-      key: "skill_live_app_pct",
-      label: "Live app %",
-      description: "Live application success rate (need 75%+).",
-      valueFmt: fmtPct,
-    },
   ],
   "Shooting Accuracy": [
     {
@@ -455,7 +449,7 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
     {
       key: "shoot_4corners_moving",
       label: "4 corners (moving)",
-      description: "Corners hit twice, moving ball (Master).",
+      description: "All four corners hit, moving ball (Level 7).",
       valueFmt: fmtInt,
     },
   ],
@@ -463,25 +457,19 @@ const DERIVED_METRICS_BY_TEST: Record<string, DerivedMetric[]> = {
     {
       key: "ft_ground_5x5_yards",
       label: "Ground 5x5",
-      description: "Max distance reached, ground 5x5 (Green/Red).",
+      description: "Max distance reached, ground 5x5, 1 touch (Levels 2-3).",
       valueFmt: fmtInt,
     },
     {
-      key: "ft_ground_3x3_1touch_yards",
-      label: "Ground 3x3 (1 touch)",
-      description: "Max distance reached, ground 3x3 1-touch (Blue).",
+      key: "ft_ground_3x3_paced_yards",
+      label: "Ground 3x3 (paced)",
+      description: "Max distance reached, ground 3x3 with a faster-paced ball (Level 4).",
       valueFmt: fmtInt,
     },
     {
       key: "ft_aerial_3x3_yards",
       label: "Aerial 3x3",
-      description: "Max distance reached, aerial 3x3 (Platinum/Diamond).",
-      valueFmt: fmtInt,
-    },
-    {
-      key: "ft_aerial_3x3_1touch_yards",
-      label: "Aerial 3x3 (1 touch)",
-      description: "Max distance reached, aerial 3x3 1-touch (Master).",
+      description: "Max distance reached, aerial 3x3, 1 touch (Levels 5-7).",
       valueFmt: fmtInt,
     },
   ],
