@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 
+import { useReminderReturn } from "@/lib/useReminderReturn";
+
 // A period goal plus its steps, created in one pass. The admin panel builds
 // these in two stages (create the goal, then add steps to it); a coach on a
 // phone after a session wants one form and one button, so this posts the goal
@@ -30,11 +32,18 @@ function defaultDates() {
 export function AddGoalForm({
   playerId,
   playerName,
+  reminderId,
+  coach,
 }: {
   playerId: string;
   playerName: string;
+  // Set when a reminder sent them here: on save, close it and go back to that
+  // coach's list. Null when the form was opened directly.
+  reminderId: string | null;
+  coach: string | null;
 }) {
   const router = useRouter();
+  const back = useReminderReturn(reminderId, coach);
   const dates = defaultDates();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -92,6 +101,12 @@ export function AddGoalForm({
         });
       }
 
+      // See AddReportForm: a coach who came from a reminder goes straight back
+      // to their list, everyone else gets the confirmation panel.
+      if (back) {
+        await back.finish();
+        return;
+      }
       setSaved(true);
       router.refresh();
     } catch {

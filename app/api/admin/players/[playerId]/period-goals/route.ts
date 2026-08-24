@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
 import { getPlayerContact, fireAdminSms } from "@/lib/adminSms";
+import { closeRemindersForPlayer } from "@/lib/coachReminders";
 
 function parseDate(raw: unknown): string | { error: string } {
   const s = String(raw ?? "").trim();
@@ -129,6 +130,10 @@ export async function POST(
     created_at: string;
     updated_at: string;
   }>;
+
+  // A live goal is exactly what the "set a period goal" reminder was asking
+  // for, so close it here instead of leaving it up until the next sweep.
+  await closeRemindersForPlayer(playerId);
 
   const contact = await getPlayerContact(playerId);
   if (contact?.phone) {

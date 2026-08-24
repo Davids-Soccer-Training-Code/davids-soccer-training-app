@@ -144,7 +144,7 @@ function RequestCard({
 
       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         {r.phone && (
-          <a href={`tel:${r.phone}`} className="text-emerald-700 hover:underline">
+          <a href={`sms:${r.phone.replace(/[^\d+]/g, "")}`} className="text-emerald-700 hover:underline">
             {r.phone}
           </a>
         )}

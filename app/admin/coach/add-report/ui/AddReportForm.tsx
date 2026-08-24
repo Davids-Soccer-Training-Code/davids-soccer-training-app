@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useReminderReturn } from "@/lib/useReminderReturn";
 import {
   BASELINE_FIELDS,
   PROGRESS_SKILLS,
@@ -22,12 +23,19 @@ export function AddReportForm({
   playerId,
   playerName,
   initialType,
+  reminderId,
+  coach,
 }: {
   playerId: string;
   playerName: string;
   initialType: ReportType;
+  // Set when a reminder sent them here: on save, close it and go back to that
+  // coach's list. Null when the form was opened directly.
+  reminderId: string | null;
+  coach: string | null;
 }) {
   const router = useRouter();
+  const back = useReminderReturn(reminderId, coach);
   const [type, setType] = useState<ReportType>(initialType);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -76,6 +84,13 @@ export function AddReportForm({
       });
       if (!res.ok) {
         setError((await res.text()) || "Could not save the report.");
+        return;
+      }
+      // Straight back to the reminders list when a reminder sent them here —
+      // there's nothing to read on a confirmation screen they didn't ask for,
+      // and the next task is on the other page. Stay put otherwise.
+      if (back) {
+        await back.finish();
         return;
       }
       setSaved(true);

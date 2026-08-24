@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, Mail, Phone, Printer, Search, Users } from "lucide-react";
+import { ClipboardList, Mail, MessageSquare, Printer, Search, Users } from "lucide-react";
 
 import type { CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
@@ -187,9 +187,13 @@ function ContactRow({ p }: { p: CoachPlayer }) {
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
       {p.parentPhone && (
-        // The href keeps the raw digits; only the label is prettied up.
-        <a href={`tel:${p.parentPhone.replace(/[^\d+]/g, "")}`} className={chip}>
-          <Phone className="h-3.5 w-3.5 shrink-0" />
+        // Texting, not calling: a coach tapping a parent's number on the roster
+        // is almost always sending a quick message about a session, and a
+        // mis-tap that starts a phone call is a far worse accident than one that
+        // opens an empty draft. The href keeps the raw digits; only the label is
+        // prettied up.
+        <a href={`sms:${p.parentPhone.replace(/[^\d+]/g, "")}`} className={chip}>
+          <MessageSquare className="h-3.5 w-3.5 shrink-0" />
           {fmtPhone(p.parentPhone)}
         </a>
       )}

@@ -13,13 +13,13 @@ const TYPES: ReportType[] = ["blurb", "baseline", "progress"];
 export default async function AddReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ player?: string; type?: string }>;
+  searchParams: Promise<{ player?: string; type?: string; reminder?: string; coach?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
   if (!session.user.isAdmin) redirect("/admin");
 
-  const { player, type } = await searchParams;
+  const { player, type, reminder, coach } = await searchParams;
   const reportType = (TYPES as string[]).includes(type ?? "")
     ? (type as ReportType)
     : "blurb";
@@ -42,7 +42,7 @@ export default async function AddReportPage({
             </p>
           </div>
           <Link
-            href="/admin/reminders"
+            href={coach ? `/admin/reminders?coach=${coach}` : "/admin/reminders"}
             className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300"
           >
             Back to reminders
@@ -54,6 +54,8 @@ export default async function AddReportPage({
             playerId={target.id}
             playerName={target.name}
             initialType={reportType}
+            reminderId={reminder ?? null}
+            coach={coach ?? null}
           />
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">

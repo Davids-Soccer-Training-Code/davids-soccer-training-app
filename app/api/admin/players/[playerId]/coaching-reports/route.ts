@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { assertAdmin } from "@/lib/adminAuth";
 import { sql } from "@/db";
 import { getPlayerContact, fireAdminSms } from "@/lib/adminSms";
+import { closeRemindersForPlayer } from "@/lib/coachReminders";
 
 export async function GET(
   req: NextRequest,
@@ -56,6 +57,10 @@ export async function POST(
   `) as unknown as unknown[];
 
   const report = (rows as Record<string, unknown>[])[0];
+
+  // Any reminder this report answers closes now rather than on the next hourly
+  // sweep, so a coach who walks back to their list sees it gone.
+  await closeRemindersForPlayer(playerId);
 
   const typeLabel = type === "baseline" ? "Baseline Snapshot" : type === "progress" ? "Progress Report" : "Coach's Note";
   const contact = await getPlayerContact(playerId);

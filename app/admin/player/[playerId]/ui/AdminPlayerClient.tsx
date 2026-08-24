@@ -1952,7 +1952,7 @@ export default function AdminPlayerClient(props: {
                           </a>
                           {cr.parent_phone && (
                             <a
-                              href={`tel:${cr.parent_phone}`}
+                              href={`sms:${cr.parent_phone.replace(/[^\d+]/g, "")}`}
                               className="text-xs font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
                             >
                               {cr.parent_phone}

@@ -20,10 +20,19 @@ type Row = {
   parent_name: string | null;
 };
 
-export default async function RemindersPage() {
+export default async function RemindersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ coach?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
   if (!session.user.isAdmin) redirect("/admin");
+
+  const { coach } = await searchParams;
+  const initialCoach = (COACH_SLUGS as readonly string[]).includes(coach ?? "")
+    ? (coach as CoachSlug)
+    : null;
 
   // The app account is resolved here rather than stored on the reminder, so a
   // player who gets an account later picks up a working link with no backfill.
@@ -88,7 +97,7 @@ export default async function RemindersPage() {
           </Link>
         </div>
 
-        <RemindersClient coaches={coaches} />
+        <RemindersClient coaches={coaches} initialCoach={initialCoach} />
       </main>
     </div>
   );

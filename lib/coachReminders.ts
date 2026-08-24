@@ -414,7 +414,8 @@ async function generateGoalCheckins(): Promise<number> {
 }
 
 // A goal_setup reminder answers itself the moment a live period goal exists.
-async function closeSatisfiedGoals(): Promise<number> {
+// See closeSatisfied for what `onlyPlayer` is doing.
+async function closeSatisfiedGoals(onlyPlayer: string | null = null): Promise<number> {
   const rows = (await sql`
     UPDATE coach_reminders cr
     SET status = 'done', done_at = now()
@@ -422,6 +423,7 @@ async function closeSatisfiedGoals(): Promise<number> {
     WHERE app.crm_player_id = cr.crm_player_id
       AND cr.status = 'open'
       AND cr.kind = 'goal_setup'
+      AND (${onlyPlayer}::uuid IS NULL OR app.id = ${onlyPlayer}::uuid)
       AND EXISTS (
         SELECT 1 FROM player_period_goals g
         WHERE g.player_id = app.id
@@ -434,13 +436,19 @@ async function closeSatisfiedGoals(): Promise<number> {
 
 // Close anything whose report has since been written. Parent check-ins and
 // media prompts have no artifact to look for and are closed by hand.
-async function closeSatisfied(): Promise<number> {
+//
+// `onlyPlayer` (an app players.id) narrows the sweep to one player so the save
+// that writes a report can close its own reminder on the spot, instead of the
+// coach walking back to the list and finding it still sitting there until the
+// next hourly run. Null means every player — the cron's pass.
+async function closeSatisfied(onlyPlayer: string | null = null): Promise<number> {
   const rows = (await sql`
     UPDATE coach_reminders cr
     SET status = 'done', done_at = now()
     FROM players app
     WHERE app.crm_player_id = cr.crm_player_id
       AND cr.status = 'open'
+      AND (${onlyPlayer}::uuid IS NULL OR app.id = ${onlyPlayer}::uuid)
       AND EXISTS (
         SELECT 1 FROM player_coaching_reports r
         WHERE r.player_id = app.id
@@ -472,6 +480,18 @@ async function closeSatisfiedData(): Promise<number> {
     RETURNING cr.id
   `) as unknown as Array<{ id: string }>;
   return rows.length;
+}
+
+// Close whatever one player's newly-saved work has just satisfied. Called from
+// the report and goal save routes so the reminder is already gone by the time
+// the coach lands back on the list — the same rules the cron sweep uses, just
+// narrowed to one player, so the two can never disagree about what "done"
+// means. Tests are deliberately not included: that form saves several rows and
+// then recomputes, and closing mid-way would be a lie.
+export async function closeRemindersForPlayer(playerId: string): Promise<number> {
+  const reports = await closeSatisfied(playerId);
+  const goals = await closeSatisfiedGoals(playerId);
+  return reports + goals;
 }
 
 // Generate first, then close: a report written since the last run closes the

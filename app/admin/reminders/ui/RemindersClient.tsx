@@ -62,6 +62,14 @@ const KIND_HREF: Partial<Record<ReminderKind, (appId: string) => string>> = {
   goal_setup: (id) => `/admin/coach/add-goal?player=${id}`,
 };
 
+// Tack the round trip onto a form link: which reminder sent them, and whose tab
+// to put them back on. The add-tests form is left out on purpose — it saves
+// several tests and then recomputes, so it owns its own exit.
+function withReturn(href: string, reminderId: string, coach: CoachSlug): string {
+  if (href.startsWith("/admin/coach/add-tests")) return href;
+  return `${href}&reminder=${reminderId}&coach=${coach}`;
+}
+
 const KIND_ORDER: ReminderKind[] = [
   "media",
   "mini_note",
@@ -122,10 +130,11 @@ function fmtDate(dateStr: string): string {
   });
 }
 
-function ReminderCard({ r }: { r: Reminder }) {
+function ReminderCard({ r, coach }: { r: Reminder; coach: CoachSlug }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const href = r.appId ? KIND_HREF[r.kind]?.(r.appId) : undefined;
+  const base = r.appId ? KIND_HREF[r.kind]?.(r.appId) : undefined;
+  const href = base ? withReturn(base, r.id, coach) : undefined;
   const urgency = urgencyOf(r.createdAt);
 
   async function markDone() {
@@ -196,10 +205,32 @@ function ReminderCard({ r }: { r: Reminder }) {
   );
 }
 
-export function RemindersClient({ coaches }: { coaches: CoachTab[] }) {
-  const [active, setActive] = useState<CoachSlug>(coaches[0]?.slug ?? "david");
+export function RemindersClient({
+  coaches,
+  initialCoach,
+}: {
+  coaches: CoachTab[];
+  initialCoach: CoachSlug | null;
+}) {
+  // The tab comes from the URL when there is one, so a coach coming back from
+  // writing a report lands on their own list rather than whoever happens to be
+  // first. Falls back to the first tab on a cold visit.
+  const [active, setActive] = useState<CoachSlug>(
+    initialCoach ?? coaches[0]?.slug ?? "david"
+  );
   const current = coaches.find((c) => c.slug === active) ?? coaches[0];
   const reminders = current?.reminders ?? [];
+
+  // Keep the URL in step with the tab so a refresh — or the browser Back button
+  // on the way home from a form — doesn't silently move them to another coach.
+  // replaceState rather than a router push: this is the same page, and it
+  // shouldn't pile up history entries as they flick between coaches.
+  function pickCoach(slug: CoachSlug) {
+    setActive(slug);
+    const url = new URL(window.location.href);
+    url.searchParams.set("coach", slug);
+    window.history.replaceState(null, "", url);
+  }
 
   return (
     <div>
@@ -210,7 +241,7 @@ export function RemindersClient({ coaches }: { coaches: CoachTab[] }) {
           count: c.reminders.length,
         }))}
         active={active}
-        onChange={setActive}
+        onChange={pickCoach}
       />
 
       {reminders.length === 0 ? (
@@ -235,7 +266,7 @@ export function RemindersClient({ coaches }: { coaches: CoachTab[] }) {
                 </div>
                 <div className="space-y-3">
                   {group.map((r) => (
-                    <ReminderCard key={r.id} r={r} />
+                    <ReminderCard key={r.id} r={r} coach={active} />
                   ))}
                 </div>
               </section>

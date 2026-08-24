@@ -13,13 +13,13 @@ type ActiveGoal = { id: string; title: string; end_date: string };
 export default async function AddGoalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ player?: string }>;
+  searchParams: Promise<{ player?: string; reminder?: string; coach?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
   if (!session.user.isAdmin) redirect("/admin");
 
-  const { player } = await searchParams;
+  const { player, reminder, coach } = await searchParams;
 
   const rows = player
     ? ((await sql`SELECT id, name FROM players WHERE id = ${player}::uuid`) as unknown as Array<{
@@ -51,7 +51,7 @@ export default async function AddGoalPage({
             </p>
           </div>
           <Link
-            href="/admin/reminders"
+            href={coach ? `/admin/reminders?coach=${coach}` : "/admin/reminders"}
             className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300"
           >
             Back to reminders
@@ -72,7 +72,12 @@ export default async function AddGoalPage({
                 </ul>
               </div>
             )}
-            <AddGoalForm playerId={target.id} playerName={target.name} />
+            <AddGoalForm
+              playerId={target.id}
+              playerName={target.name}
+              reminderId={reminder ?? null}
+              coach={coach ?? null}
+            />
           </>
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
