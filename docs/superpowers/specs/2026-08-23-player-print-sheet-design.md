@@ -41,8 +41,10 @@ target.** A single overall target makes any test that is already ahead read
 chase, and that is the actionable fact. So `LEVEL` reads `3 > 4`, and the
 requirement shown is the one for that test's next step.
 
-- `BEST` is the current reading of the weakest condition on that test's
-  next-level requirement, so `BEST` and the requirement are comparable numbers.
+- `BEST` shows **one reading per condition**, in the order the requirement
+  names them — `39/27` against "28 yds strong, 28 yds weak". Collapsing these to
+  the single weakest number hides the foot that is already passing, which is
+  exactly what the coach needs to know.
 - `GAP` is `NOT TESTED` (never run), `NO DATA` (run, but never for the metric
   the next level measures), `-N` (numeric shortfall), or `MAX` (Level 7).
 
@@ -62,8 +64,17 @@ another bar to clear.
 
 ### Test History
 
-Per rank test: first, previous, and latest reading of the number that test's
-next level depends on, with dates, plus the delta since the previous reading.
+Per rank test: first, previous, and latest reading, with dates and the delta
+since the previous reading.
+
+Different levels of the same test are measured on **entirely different fields**
+(Dribbling green/red read figure-8 loops, blue reads cross-dribble). So the row
+tracks the next level's metric where it has been recorded, and otherwise walks
+back down the ladder to the highest level that does have readings — a coach who
+entered figure-8 scores must still see them, even once the next level is
+measured on something else. Each row is marked with which level's metric it is
+showing, so the number is never ambiguous.
+
 With only two readings the PREVIOUS column stays empty rather than repeating
 FIRST, and the delta measures against FIRST instead. A raw number tells a coach nothing; a delta tells them
 whether the plan is working. Flat or negative deltas are flagged.
