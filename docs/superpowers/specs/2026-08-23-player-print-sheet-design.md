@@ -33,30 +33,39 @@ secondary parent).
 
 ### The 8 Tests (left, ~118mm)
 
-One row per rank test: `TEST | NOW | BEST | NEEDS FOR LEVEL N | flag`.
+One row per rank test: `TEST | LEVEL | BEST | TO REACH IT | GAP`.
 
-- `NOW` is the player's current level for that test.
-- `BEST` is the current reading of the weakest condition on the next-level
-  requirement, so `BEST` and `NEEDS` are directly comparable numbers.
-- `flag` is a single glyph: `!` never tested, `-N` numeric gap, `OK` passed.
+**Each test is measured against its own next level, not against one shared
+target.** A single overall target makes any test that is already ahead read
+"OK", which tells the coach nothing — a test at Level 3 still has a Level 4 to
+chase, and that is the actionable fact. So `LEVEL` reads `3 > 4`, and the
+requirement shown is the one for that test's next step.
 
-Rows sort **never-tested -> closest-to-passing -> passed**, so the top row is
-always the coach's next action. Passed rows still print (all 8 levels are
-wanted) but greyed, so the eye lands on the gaps.
+- `BEST` is the current reading of the weakest condition on that test's
+  next-level requirement, so `BEST` and the requirement are comparable numbers.
+- `GAP` is `NOT TESTED` (never run), `NO DATA` (run, but never for the metric
+  the next level measures), `-N` (numeric shortfall), or `MAX` (Level 7).
 
-A never-recorded test is a distinct state from a failed one, and is the most
-actionable thing on the sheet — hence its own glyph and top sort priority.
+Rows sort **never-tested -> closest-to-its-next-level -> maxed**, so the top row
+is always the coach's next action. Only maxed rows recede; every other row has
+something to do.
+
+A never-recorded test is a distinct state from a shortfall, and is the most
+actionable thing on the sheet — hence its own label and top sort priority.
 
 ### Goal panel (right, ~56mm)
 
 Current period goal: title, date window, and its steps with checkboxes. Footer
-carries the other two rank gates, Coach Mission and Sessions, since they are
-requirements too and the panel has room.
+carries the Coach Mission gate, plus the session count as a plain number —
+deliberately without its minimum, so it reads as information rather than as
+another bar to clear.
 
 ### Test History
 
-Per rank test: first, previous, and latest score with dates, plus the delta
-since the previous test. A raw number tells a coach nothing; a delta tells them
+Per rank test: first, previous, and latest reading of the number that test's
+next level depends on, with dates, plus the delta since the previous reading.
+With only two readings the PREVIOUS column stays empty rather than repeating
+FIRST, and the delta measures against FIRST instead. A raw number tells a coach nothing; a delta tells them
 whether the plan is working. Flat or negative deltas are flagged.
 
 ### Latest Report
