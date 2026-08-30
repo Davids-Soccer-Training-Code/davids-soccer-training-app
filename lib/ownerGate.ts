@@ -33,6 +33,7 @@ const OPEN_SUBTREES = [
   "/admin/coach-sessions",
   "/admin/coach-players",
   "/admin/reminders",
+  "/admin/first-session-stats",
   "/admin/coach",
   // Coach Players links players to their full admin profile, so the profile —
   // and the APIs that page drives — are open to coaches too. This is the whole
