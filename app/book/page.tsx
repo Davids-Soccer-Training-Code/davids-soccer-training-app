@@ -45,7 +45,7 @@ export default async function BookPage({
   const session = await getServerSession(authOptions);
   const isAdmin = session?.user?.isAdmin === true;
 
-  // ?coach=david | simon | simpson | girish selects the coach tab (defaults to David).
+  // ?coach=david | simon | simpson | george | tyrone selects the coach tab (defaults to David).
   const coachParam = (await searchParams).coach;
   const initialCoach = parseCoachParam(Array.isArray(coachParam) ? coachParam[0] : coachParam);
 

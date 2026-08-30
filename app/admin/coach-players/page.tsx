@@ -20,7 +20,7 @@ type Row = {
   parent_email: string | null;
   second_parent_name: string | null;
   with_coach: number;
-  last_session: string;
+  last_session: string | null;
   upcoming: number;
   next_session: string | null;
   recent: boolean;
@@ -45,7 +45,8 @@ export default async function CoachPlayersPage() {
   if (!session?.user) redirect("/login");
   if (!session.user.isAdmin) redirect("/admin");
 
-  // Every player a coach has actually trained, from both CRM session tables.
+  // Every player a coach has trained or has booked, from both CRM session
+  // tables.
   //
   // Coach attribution matches the Coach Calendar exactly (the assigned coach
   // wins, then a "Coach Simon/Simpson" title, otherwise David) so a player
@@ -125,8 +126,13 @@ export default async function CoachPlayersPage() {
       count(*) FILTER (WHERE NOT a.is_past)::int AS upcoming,
       to_char((min(a.session_date) FILTER (WHERE NOT a.is_past))::timestamptz
                 AT TIME ZONE 'America/Phoenix', 'YYYY-MM-DD') AS next_session,
-      (max(a.session_date) FILTER (WHERE a.is_past)::timestamptz
-         >= now() - interval '6 weeks') AS recent,
+      -- A player with nothing behind them yet is not "recent"; the COALESCE
+      -- keeps that a real false rather than a null from an empty max().
+      COALESCE(
+        max(a.session_date) FILTER (WHERE a.is_past)::timestamptz
+          >= now() - interval '6 weeks',
+        false
+      ) AS recent,
       pk.package_type,
       pk.total_sessions,
       COALESCE(u.done, 0) AS done,
@@ -171,10 +177,11 @@ export default async function CoachPlayersPage() {
              pl.age, pl.team, pl.notes, pd.age, pd.team, pd.position, pd.notes,
              app.age, app.birthdate, app.team_level, app.primary_position,
              app.secondary_position, app.long_term_development_notes
-    -- Roster stays "players this coach has actually trained": a booked-only
-    -- player has nothing to show a history for yet.
-    HAVING count(*) FILTER (WHERE a.is_past) > 0
-    ORDER BY max(a.session_date) FILTER (WHERE a.is_past) DESC
+    -- A player booked for next week but never yet trained belongs on the
+    -- roster: that session is exactly what the coach needs to prepare for.
+    -- They sort first (nulls first here, then pinned to the top in the client)
+    -- rather than trailing the players with the oldest history.
+    ORDER BY max(a.session_date) FILTER (WHERE a.is_past) DESC NULLS FIRST
   `) as unknown as Row[];
 
   const byCoach = {} as Record<CoachSlug, CoachPlayer[]>;
@@ -250,7 +257,9 @@ export default async function CoachPlayersPage() {
       if (a.upcoming > 0 && b.upcoming > 0) {
         return (a.nextSession ?? "").localeCompare(b.nextSession ?? "");
       }
-      return b.lastSession.localeCompare(a.lastSession);
+      // A player with no history yet sorts last among the ones with nothing
+      // booked — there's nothing for the coach to prepare from.
+      return (b.lastSession ?? "").localeCompare(a.lastSession ?? "");
     });
   }
 
@@ -271,7 +280,7 @@ export default async function CoachPlayersPage() {
             <p className="mt-1 text-sm text-gray-600">
               {total === 0
                 ? "No players yet."
-                : "Players each coach has trained, with package balances and session counts."}
+                : "Players each coach trains or has booked, with package balances and session counts."}
             </p>
           </div>
           <Link

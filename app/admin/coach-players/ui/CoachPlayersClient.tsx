@@ -63,7 +63,8 @@ export type CoachPlayer = {
   parentEmail: string | null;
   secondParentName: string | null;
   withCoach: number;
-  lastSession: string; // YYYY-MM-DD (Arizona)
+  // Null for a player who is booked but has never trained with this coach yet.
+  lastSession: string | null; // YYYY-MM-DD (Arizona)
   // Sessions booked with this coach that haven't happened yet.
   upcoming: number;
   nextSession: string | null; // YYYY-MM-DD (Arizona)
@@ -604,7 +605,9 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
           ) : (
             <>
               <div className="text-lg font-bold tracking-tight text-gray-900">
-                {p.withCoach} session{p.withCoach === 1 ? "" : "s"}
+                {p.withCoach === 0
+                  ? "New player"
+                  : `${p.withCoach} session${p.withCoach === 1 ? "" : "s"}`}
               </div>
               <div className="text-xs text-gray-500">No package · pay as they go</div>
             </>
@@ -673,12 +676,20 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
       {/* The session count already leads the card when there's no package, so
           the footer doesn't repeat it there. */}
       <div className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-        {p.pkg && (
+        {p.lastSession === null ? (
+          // Booked but never trained with this coach. Saying "last on —" would
+          // read as missing data rather than as a player they haven't met.
+          "Booked in — no session with you yet"
+        ) : (
           <>
-            {p.withCoach} session{p.withCoach === 1 ? "" : "s"} with you ·{" "}
+            {p.pkg && (
+              <>
+                {p.withCoach} session{p.withCoach === 1 ? "" : "s"} with you ·{" "}
+              </>
+            )}
+            last on {fmtDate(p.lastSession)}
           </>
         )}
-        last on {fmtDate(p.lastSession)}
       </div>
     </div>
   );
@@ -814,7 +825,7 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
         <div className="rounded-3xl border border-emerald-200 bg-white p-10 text-center">
           <Users className="mx-auto h-10 w-10 text-gray-300" />
           <p className="mt-3 text-sm text-gray-600">
-            No players trained by this coach yet.
+            No players on this coach&apos;s roster yet.
           </p>
         </div>
       ) : players.length === 0 ? (

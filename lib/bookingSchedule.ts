@@ -197,13 +197,17 @@ export const COACH_LABELS: Record<string, string> = {
   david: "Coach David",
   simon: "Coach Simon",
   simpson: "Coach Simpson",
+  // No longer coaching. Kept out of COACH_SLUGS so he's gone from the booking
+  // page and every admin tab, but the label stays: booking requests he took
+  // are still in the table, and a raw "girish" slug on one would read worse
+  // than his name.
   girish: "Coach Girish",
   george: "Coach George",
   tyrone: "Coach Tyrone",
 };
 
 // Display/toggle order. "all" is layered on top of this in the UI.
-export const COACH_SLUGS = ["david", "simon", "simpson", "girish", "george", "tyrone"] as const;
+export const COACH_SLUGS = ["david", "simon", "simpson", "george", "tyrone"] as const;
 export type CoachSlug = (typeof COACH_SLUGS)[number];
 export type CoachSelection = "all" | CoachSlug;
 
@@ -212,9 +216,6 @@ export type CoachSelection = "all" | CoachSlug;
 // Morning (8–11 AM) / Evening (5–8 PM) windows, so the page never renders empty.
 const MORNING: TimeBlock = { start: "08:00", end: "11:00" };
 const EVENING: TimeBlock = { start: "17:00", end: "20:00" };
-// Coach Girish runs a shorter weekend morning and an earlier (4–7 PM) evening.
-const WEEKEND_MORNING: TimeBlock = { start: "08:00", end: "10:00" };
-const EARLY_EVENING: TimeBlock = { start: "16:00", end: "19:00" };
 // Coach George starts mornings at 7 AM and is open to either evening window
 // (4–7 or 5–8 PM), so his evening spans the full 4–8 PM range.
 const LONG_MORNING: TimeBlock = { start: "07:00", end: "11:00" };
@@ -232,10 +233,6 @@ export const DEFAULT_SCHEDULES: Record<CoachSlug, CoachSchedule> = {
   simpson: openPeriod({
     "0": [], "1": [MORNING, EVENING], "2": [MORNING, EVENING], "3": [MORNING],
     "4": [MORNING, EVENING], "5": [MORNING], "6": [MORNING, EVENING],
-  }),
-  girish: openPeriod({
-    "0": [WEEKEND_MORNING], "1": [MORNING, EARLY_EVENING], "2": [MORNING, EARLY_EVENING],
-    "3": [MORNING, EARLY_EVENING], "4": [MORNING, EARLY_EVENING], "5": [MORNING], "6": [WEEKEND_MORNING],
   }),
   george: openPeriod({
     "0": [LONG_MORNING, WIDE_EVENING], "1": [], "2": [], "3": [EVENING],

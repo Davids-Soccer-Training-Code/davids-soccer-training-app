@@ -28,6 +28,11 @@ const coachSections = [
     description: "Reports, check-ins, photos and test data that are due.",
     href: "/admin/reminders",
   },
+  {
+    title: "First Session Stats",
+    description: "Rank a player's first-session drill numbers against their age group.",
+    href: "/admin/first-session-stats",
+  },
 ];
 
 const ownerSections = [
