@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, Mail, MessageSquare, Printer, Search, Users } from "lucide-react";
+import {
+  ClipboardList,
+  Mail,
+  MessageSquare,
+  Pencil,
+  Printer,
+  Search,
+  Users,
+} from "lucide-react";
 
 import type { CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
@@ -32,6 +40,21 @@ export type CoachPlayer = {
   hasShirt: boolean;
   hasPhoto: boolean;
   name: string;
+  // The player's own details, already resolved best-source-first by the page
+  // query: the app account, then the app-side details table, then the CRM.
+  age: number | null;
+  // Only an app account carries a real birthday. When it's set, it beats any
+  // hand-typed age — that number goes stale every year.
+  birthdate: string | null; // YYYY-MM-DD
+  team: string | null;
+  position: string | null;
+  // Shown beside the primary position; app accounts only, and not editable
+  // here — the profile page owns it.
+  secondaryPosition: string | null;
+  coachNotes: string | null;
+  // The CRM's intake note. Read-only: it's what the family said when they
+  // signed up, not something a coach should overwrite from the roster.
+  crmNotes: string | null;
   parentName: string | null;
   parentAppId: string | null;
   // Contact details live on the card because /admin/parent is owner-only — a
@@ -91,6 +114,8 @@ function fmtPhone(raw: string): string {
 function haystack(p: CoachPlayer): string {
   return [
     p.name,
+    p.team ?? "",
+    p.position ?? "",
     p.parentName ?? "",
     p.secondParentName ?? "",
     p.parentEmail ?? "",
@@ -207,11 +232,267 @@ function ContactRow({ p }: { p: CoachPlayer }) {
   );
 }
 
+// The age to trust. A birthday on the app account is the only source that
+// stays right without anyone maintaining it, so it wins over the number the
+// CRM (or a coach) typed in at some point in the past.
+function ageFromBirthdate(birthdate: string): number {
+  const dob = new Date(birthdate + "T12:00:00");
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < dob.getMonth() ||
+    (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate());
+  if (beforeBirthday) age -= 1;
+  return age;
+}
+
+function displayAge(d: PlayerDetails): number | null {
+  if (d.birthdate) return ageFromBirthdate(d.birthdate);
+  return d.age;
+}
+
+// The four editable facts about the player, kept together so the card, the
+// form and the save all move the same object.
+export type PlayerDetails = {
+  age: number | null;
+  birthdate: string | null;
+  team: string | null;
+  position: string | null;
+  secondaryPosition: string | null;
+  notes: string | null;
+};
+
+/**
+ * Age, team and position as chips. A missing one still gets a chip — a muted
+ * "Add team" — so a coach scanning the roster can see which new players have
+ * nothing on file rather than having them look identical to filled-in ones.
+ */
+function DetailChips({
+  d,
+  onEdit,
+}: {
+  d: PlayerDetails;
+  onEdit: () => void;
+}) {
+  const age = displayAge(d);
+  const position = d.secondaryPosition
+    ? `${d.position} / ${d.secondaryPosition}`
+    : d.position;
+
+  const items: Array<{ value: string | null; empty: string }> = [
+    { value: age !== null ? `Age ${age}` : null, empty: "Add age" },
+    { value: d.team, empty: "Add team" },
+    { value: position, empty: "Add position" },
+  ];
+
+  const set =
+    "rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700";
+  const unset =
+    "rounded-lg border border-dashed border-gray-300 px-2 py-1 text-xs font-medium text-gray-400";
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {items.map((item) => (
+        <span key={item.empty} className={item.value ? set : unset}>
+          {item.value ?? item.empty}
+        </span>
+      ))}
+      <button
+        type="button"
+        onClick={onEdit}
+        className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+      >
+        <Pencil className="h-3 w-3" />
+        Edit
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The CRM's intake note — what the family said when they signed up. Stays on
+ * the card while the coach note is being edited, because it's usually the
+ * context they're writing against.
+ */
+function CrmNote({ note }: { note: string | null }) {
+  if (!note) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        From the CRM
+      </div>
+      <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-500">{note}</p>
+    </div>
+  );
+}
+
+/**
+ * The coach's own note. A separate box from the CRM's, rather than one field
+ * that overwrites it — they're two different things.
+ */
+function CoachNote({ note }: { note: string | null }) {
+  if (!note) return null;
+  return (
+    <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+        Coach notes
+      </div>
+      <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-700">{note}</p>
+    </div>
+  );
+}
+
+/**
+ * The inline edit form. Replaces the chips and notes while open, so the card
+ * doesn't show the same fact twice in two states.
+ */
+function DetailsForm({
+  draft,
+  setDraft,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  draft: PlayerDetails;
+  setDraft: (next: PlayerDetails) => void;
+  saving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const input =
+    "w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-900 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50 disabled:bg-gray-50 disabled:text-gray-500";
+  const label = "text-[11px] font-semibold uppercase tracking-wide text-gray-500";
+
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className={label}>Age</label>
+          <input
+            type="number"
+            min={3}
+            max={25}
+            className={`${input} mt-1`}
+            value={draft.birthdate ? displayAge(draft) ?? "" : draft.age ?? ""}
+            disabled={saving || Boolean(draft.birthdate)}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                age: e.target.value === "" ? null : Number(e.target.value),
+              })
+            }
+          />
+          {draft.birthdate && (
+            // A real birthday is better data than a number anyone types here,
+            // so the box is locked rather than fighting the profile page.
+            <p className="mt-1 text-[11px] text-gray-500">
+              From their birthday — change it on the player&apos;s profile.
+            </p>
+          )}
+        </div>
+        <div>
+          <label className={label}>Team</label>
+          <input
+            type="text"
+            className={`${input} mt-1`}
+            value={draft.team ?? ""}
+            disabled={saving}
+            placeholder="e.g. Rush SC 11B"
+            onChange={(e) => setDraft({ ...draft, team: e.target.value || null })}
+          />
+        </div>
+        <div>
+          <label className={label}>Position</label>
+          <input
+            type="text"
+            className={`${input} mt-1`}
+            value={draft.position ?? ""}
+            disabled={saving}
+            placeholder="e.g. Center Mid"
+            onChange={(e) => setDraft({ ...draft, position: e.target.value || null })}
+          />
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <label className={label}>Coach notes</label>
+        <textarea
+          rows={3}
+          className={`${input} mt-1 resize-y`}
+          value={draft.notes ?? ""}
+          disabled={saving}
+          placeholder="What this player needs to work on, what motivates them, anything a coach should know."
+          onChange={(e) => setDraft({ ...draft, notes: e.target.value || null })}
+        />
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlayerCard({ p }: { p: CoachPlayer }) {
   const [hasShirt, setHasShirt] = useState(p.hasShirt);
   const [hasPhoto, setHasPhoto] = useState(p.hasPhoto);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  const [details, setDetails] = useState<PlayerDetails>({
+    age: p.age,
+    birthdate: p.birthdate,
+    team: p.team,
+    position: p.position,
+    secondaryPosition: p.secondaryPosition,
+    notes: p.coachNotes,
+  });
+  const [draft, setDraft] = useState<PlayerDetails>(details);
+  const [editing, setEditing] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsFailed, setDetailsFailed] = useState(false);
+
+  function saveDetails() {
+    setSavingDetails(true);
+    setDetailsFailed(false);
+
+    void fetch(`/api/admin/coach-players/${p.crmPlayerId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        // The age box is locked when a birthday is on file, so there is
+        // nothing to send for those players.
+        age: draft.birthdate ? undefined : draft.age,
+        team: draft.team,
+        position: draft.position,
+        notes: draft.notes,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("save failed");
+        setDetails(draft);
+        setEditing(false);
+      })
+      // The form stays open with what the coach typed still in it, so a failed
+      // save never costs them the text they just wrote.
+      .catch(() => setDetailsFailed(true))
+      .finally(() => setSavingDetails(false));
+  }
 
   function save(patch: { hasShirt?: boolean; hasPhoto?: boolean }) {
     const prevShirt = hasShirt;
@@ -272,6 +553,16 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
             )}
           </div>
           <ContactRow p={p} />
+          {!editing && (
+            <DetailChips
+              d={details}
+              onEdit={() => {
+                setDraft(details);
+                setDetailsFailed(false);
+                setEditing(true);
+              }}
+            />
+          )}
           {p.upcoming > 0 && p.nextSession && (
             <div className="mt-1 text-xs font-semibold text-emerald-700">
               Next session {fmtDate(p.nextSession)}
@@ -353,6 +644,31 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
           </a>
         )}
       </div>
+
+      <CrmNote note={p.crmNotes} />
+
+      {editing ? (
+        <>
+          <DetailsForm
+            draft={draft}
+            setDraft={setDraft}
+            saving={savingDetails}
+            onSave={saveDetails}
+            onCancel={() => {
+              setDraft(details);
+              setDetailsFailed(false);
+              setEditing(false);
+            }}
+          />
+          {detailsFailed && (
+            <p className="mt-2 text-xs font-medium text-red-600">
+              Didn&apos;t save — try again.
+            </p>
+          )}
+        </>
+      ) : (
+        <CoachNote note={details.notes} />
+      )}
 
       {/* The session count already leads the card when there's no package, so
           the footer doesn't repeat it there. */}

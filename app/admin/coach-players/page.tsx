@@ -31,6 +31,13 @@ type Row = {
   siblings: number;
   has_shirt: boolean;
   has_photo: boolean;
+  age: number | null;
+  birthdate: string | null;
+  team: string | null;
+  position: string | null;
+  secondary_position: string | null;
+  coach_notes: string | null;
+  crm_notes: string | null;
 };
 
 export default async function CoachPlayersPage() {
@@ -126,7 +133,28 @@ export default async function CoachPlayersPage() {
       COALESCE(u.booked, 0) AS booked,
       (SELECT count(*)::int FROM crm_players sib WHERE sib.parent_id = pl.parent_id) AS siblings,
       COALESCE(pc.has_shirt, false) AS has_shirt,
-      COALESCE(pc.has_photo, false) AS has_photo
+      COALESCE(pc.has_photo, false) AS has_photo,
+      -- The player's own details, resolved best-source-first. The app account
+      -- wins because that's what the profile page and printed sheet show; the
+      -- app-side details table catches players who had no account when a coach
+      -- typed them in; the CRM is the original intake answer.
+      COALESCE(app.age, pd.age, pl.age) AS age,
+      app.birthdate::text AS birthdate,
+      COALESCE(
+        NULLIF(btrim(app.team_level), ''),
+        NULLIF(btrim(pd.team), ''),
+        NULLIF(btrim(pl.team), '')
+      ) AS team,
+      COALESCE(
+        NULLIF(btrim(app.primary_position), ''),
+        NULLIF(btrim(pd.position), '')
+      ) AS position,
+      NULLIF(btrim(app.secondary_position), '') AS secondary_position,
+      COALESCE(
+        NULLIF(btrim(app.long_term_development_notes), ''),
+        NULLIF(btrim(pd.notes), '')
+      ) AS coach_notes,
+      NULLIF(btrim(pl.notes), '') AS crm_notes
     FROM att a
     JOIN crm_players pl ON pl.id = a.crm_player_id
     LEFT JOIN crm_parents p ON p.id = pl.parent_id
@@ -135,10 +163,14 @@ export default async function CoachPlayersPage() {
     LEFT JOIN pkg pk ON pk.parent_id = pl.parent_id
     LEFT JOIN used u ON u.package_id = pk.id
     LEFT JOIN player_checklist pc ON pc.crm_player_id = pl.id
+    LEFT JOIN player_details pd ON pd.crm_player_id = pl.id
     GROUP BY a.coach, pl.id, pl.name, pl.parent_id, app.id, p.name, pa.id,
              p.phone, p.email, p.secondary_parent_name, pa.phone, pa.email,
              pk.package_type, pk.total_sessions, u.done, u.booked,
-             pc.has_shirt, pc.has_photo
+             pc.has_shirt, pc.has_photo,
+             pl.age, pl.team, pl.notes, pd.age, pd.team, pd.position, pd.notes,
+             app.age, app.birthdate, app.team_level, app.primary_position,
+             app.secondary_position, app.long_term_development_notes
     -- Roster stays "players this coach has actually trained": a booked-only
     -- player has nothing to show a history for yet.
     HAVING count(*) FILTER (WHERE a.is_past) > 0
@@ -172,6 +204,13 @@ export default async function CoachPlayersPage() {
       hasShirt: r.has_shirt,
       hasPhoto: r.has_photo,
       name: r.name,
+      age: r.age,
+      birthdate: r.birthdate,
+      team: r.team,
+      position: r.position,
+      secondaryPosition: r.secondary_position,
+      coachNotes: r.coach_notes,
+      crmNotes: r.crm_notes,
       parentName: r.parent_name,
       parentAppId: r.parent_app_id,
       parentPhone: r.parent_phone,
