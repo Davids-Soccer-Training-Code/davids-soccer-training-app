@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ClipboardList,
@@ -83,6 +83,13 @@ export type CoachPlayer = {
 };
 
 type CoachTab = { slug: CoachSlug; label: string; players: CoachPlayer[] };
+
+// The DOM id of a player's card. The coach calendar links names here
+// (/admin/coach-players?coach=…&player=<crmPlayerId>), so this is the one place
+// that decides what that id looks like.
+export function cardId(crmPlayerId: number): string {
+  return `player-${crmPlayerId}`;
+}
 
 function fmtDate(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
@@ -452,7 +459,7 @@ function DetailsForm({
   );
 }
 
-function PlayerCard({ p }: { p: CoachPlayer }) {
+function PlayerCard({ p, focused }: { p: CoachPlayer; focused: boolean }) {
   const [hasShirt, setHasShirt] = useState(p.hasShirt);
   const [hasPhoto, setHasPhoto] = useState(p.hasPhoto);
   const [saving, setSaving] = useState(false);
@@ -528,7 +535,16 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
   }
 
   return (
-    <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+    <div
+      id={cardId(p.crmPlayerId)}
+      // scroll-mt keeps the card clear of the sticky header when it's scrolled
+      // to; the ring fades out on its own once they've spotted it.
+      className={`scroll-mt-24 rounded-2xl border bg-white p-4 shadow-sm transition ${
+        focused
+          ? "border-emerald-400 ring-2 ring-emerald-300"
+          : "border-emerald-200"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           {p.appId ? (
@@ -711,10 +727,12 @@ function Group({
   title,
   hint,
   players,
+  focus,
 }: {
   title: string;
   hint: string;
   players: CoachPlayer[];
+  focus: number | null;
 }) {
   if (players.length === 0) return null;
   return (
@@ -729,17 +747,63 @@ function Group({
       </div>
       <div className="space-y-3">
         {players.map((p) => (
-          <PlayerCard key={p.crmPlayerId} p={p} />
+          <PlayerCard key={p.crmPlayerId} p={p} focused={p.crmPlayerId === focus} />
         ))}
       </div>
     </section>
   );
 }
 
-export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
-  const [active, setActive] = useState<CoachSlug>(coaches[0]?.slug ?? "david");
+export function CoachPlayersClient({
+  coaches,
+  initialCoach,
+  focusPlayer,
+}: {
+  coaches: CoachTab[];
+  // Both come from the URL, which is how the coach calendar hands a player
+  // over: it names the tab and the card to land on.
+  initialCoach: CoachSlug | null;
+  focusPlayer: number | null;
+}) {
+  const [active, setActive] = useState<CoachSlug>(
+    initialCoach ?? coaches[0]?.slug ?? "david"
+  );
   const [query, setQuery] = useState("");
   const current = coaches.find((c) => c.slug === active) ?? coaches[0];
+
+  // Arriving from the calendar: put the linked player's card on screen. It runs
+  // after the tab is set, so a player on another coach's tab still lands right.
+  // The ring is dropped as soon as they touch the page — it's a "here they are",
+  // not a selection that needs clearing.
+  const [focused, setFocused] = useState<number | null>(focusPlayer);
+  const scrolledTo = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (focusPlayer == null || scrolledTo.current === focusPlayer) return;
+    const el = document.getElementById(cardId(focusPlayer));
+    if (!el) return;
+    // A frame later than the navigation's own scroll-to-top, which would
+    // otherwise cancel this one halfway. The "already done" mark is set inside
+    // the frame, not before it: an effect that gets cleaned up before its frame
+    // runs — which is every mount under StrictMode — must be free to try again.
+    const frame = requestAnimationFrame(() => {
+      scrolledTo.current = focusPlayer;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusPlayer, active]);
+
+  useEffect(() => {
+    if (focused == null) return;
+    const drop = () => setFocused(null);
+    // Any deliberate move by the coach means they've found them.
+    window.addEventListener("pointerdown", drop, { once: true });
+    window.addEventListener("keydown", drop, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", drop);
+      window.removeEventListener("keydown", drop);
+    };
+  }, [focused]);
 
   // While searching, the tab badges count matches instead of roster size — a
   // coach who searches a player they've never trained can see at a glance
@@ -774,6 +838,18 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
     ? coaches.filter((c) => c.slug !== active && (counts.get(c.slug) ?? 0) > 0)
     : [];
 
+  // Switching tabs by hand replaces the URL rather than pushing, so flicking
+  // between coaches doesn't fill the Back button — and it drops the linked
+  // player, who belongs to the tab they arrived on.
+  function pickCoach(slug: CoachSlug) {
+    setActive(slug);
+    setFocused(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("coach", slug);
+    url.searchParams.delete("player");
+    window.history.replaceState(null, "", url);
+  }
+
   return (
     <div>
       <CoachSwitcher
@@ -783,7 +859,7 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
           count: counts.get(c.slug) ?? 0,
         }))}
         active={active}
-        onChange={setActive}
+        onChange={pickCoach}
       />
 
       <div className="mb-6">
@@ -864,6 +940,7 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
             title="In the program"
             hint="Trained in the last 6 weeks, or booked ahead"
             players={inProgram}
+            focus={focused}
           />
           {inProgram.length > 0 && outOfProgram.length > 0 && (
             <hr className="my-8 border-emerald-200" />
@@ -872,6 +949,7 @@ export function CoachPlayersClient({ coaches }: { coaches: CoachTab[] }) {
             title="Out of the program"
             hint="No session in the last 6 weeks"
             players={outOfProgram}
+            focus={focused}
           />
         </>
       )}

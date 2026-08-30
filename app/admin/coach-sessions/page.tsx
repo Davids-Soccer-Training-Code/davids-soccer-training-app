@@ -10,8 +10,10 @@ import { CoachSessionsClient, type CoachSession } from "./ui/CoachSessionsClient
 export const dynamic = "force-dynamic";
 
 // `appId` is the app-side account uuid (players.id / parents.id), or null when
-// the CRM person has no linked account in this app — those aren't clickable.
-type PlayerRef = { appId: string | null; name: string };
+// the CRM person has no linked account in this app. `crmId` is the CRM player,
+// which every player on a session has — it's what the name links to, so the
+// link works even for someone with no app account yet.
+type PlayerRef = { appId: string | null; crmId: number; name: string };
 
 type Row = {
   staff_slug: string | null;
@@ -56,7 +58,8 @@ export default async function CoachSessionsPage() {
         pa.id AS parent_app_id,
         p.name AS parent_name,
         COALESCE(
-          json_agg(json_build_object('appId', app.id, 'name', pl.name) ORDER BY pl.name)
+          json_agg(json_build_object('appId', app.id, 'crmId', pl.id, 'name', pl.name)
+                   ORDER BY pl.name)
             FILTER (WHERE pl.id IS NOT NULL),
           '[]'
         ) AS players,
@@ -83,7 +86,8 @@ export default async function CoachSessionsPage() {
         pa.id AS parent_app_id,
         p.name AS parent_name,
         COALESCE(
-          json_agg(json_build_object('appId', app.id, 'name', pl.name) ORDER BY pl.name)
+          json_agg(json_build_object('appId', app.id, 'crmId', pl.id, 'name', pl.name)
+                   ORDER BY pl.name)
             FILTER (WHERE pl.id IS NOT NULL),
           '[]'
         ) AS players,

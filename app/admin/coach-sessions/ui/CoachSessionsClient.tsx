@@ -5,9 +5,10 @@ import Link from "next/link";
 import { fmtTime12, type CoachSlug } from "@/lib/bookingSchedule";
 import { CoachSwitcher } from "@/app/admin/ui/CoachSwitcher";
 
-// `appId` is the app account uuid, or null when the person has no app profile
-// (in which case the name is shown as plain, non-clickable text).
-export type PlayerRef = { appId: string | null; name: string };
+// `crmId` is the CRM player the roster is keyed on; `appId` is the app account
+// uuid, or null when the person has no app profile. The name links on `crmId`,
+// so every player on the calendar is clickable — including one with no account.
+export type PlayerRef = { appId: string | null; crmId: number; name: string };
 
 export type CoachSession = {
   date: string; // YYYY-MM-DD (Arizona)
@@ -32,7 +33,7 @@ function fmtDate(dateStr: string): string {
   });
 }
 
-function SessionCard({ s }: { s: CoachSession }) {
+function SessionCard({ s, coach }: { s: CoachSession; coach: CoachSlug }) {
   const hasPlayers = s.players.length > 0;
   // The card's title text (used to avoid repeating the title line below).
   const who = s.players.map((p) => p.name).join(", ") || s.parentName || s.title || "Session";
@@ -63,18 +64,14 @@ function SessionCard({ s }: { s: CoachSession }) {
         {hasPlayers ? (
           <>
             {s.players.map((pl, idx) => (
-              <span key={`${pl.appId ?? "noacct"}-${pl.name}-${idx}`}>
+              <span key={`${pl.crmId}-${idx}`}>
                 {idx > 0 && <span className="text-gray-400">, </span>}
-                {pl.appId ? (
-                  <Link
-                    href={`/admin/player/${pl.appId}`}
-                    className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
-                  >
-                    {pl.name}
-                  </Link>
-                ) : (
-                  <span className="font-semibold text-gray-900">{pl.name}</span>
-                )}
+                <Link
+                  href={`/admin/coach-players?coach=${coach}&player=${pl.crmId}`}
+                  className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
+                >
+                  {pl.name}
+                </Link>
               </span>
             ))}
             {s.parentName && (
@@ -132,7 +129,7 @@ export function CoachSessionsClient({ coaches }: { coaches: CoachTab[] }) {
       {current && current.sessions.length > 0 ? (
         <div className="space-y-3">
           {current.sessions.map((s, i) => (
-            <SessionCard key={`${s.date}-${s.start}-${i}`} s={s} />
+            <SessionCard key={`${s.date}-${s.start}-${i}`} s={s} coach={active} />
           ))}
         </div>
       ) : (

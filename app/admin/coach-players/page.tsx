@@ -41,10 +41,23 @@ type Row = {
   unconfirmed: boolean;
 };
 
-export default async function CoachPlayersPage() {
+export default async function CoachPlayersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ coach?: string; player?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
   if (!session.user.isAdmin) redirect("/admin");
+
+  // The coach calendar links a player's name straight to their card here. The
+  // tab has to come with it: the player may well not be on whichever tab this
+  // page opens on by default.
+  const { coach, player } = await searchParams;
+  const initialCoach = (COACH_SLUGS as readonly string[]).includes(coach ?? "")
+    ? (coach as CoachSlug)
+    : null;
+  const focusPlayer = Number.isFinite(Number(player)) && player ? Number(player) : null;
 
   // Every player a coach has trained or has booked, from both CRM session
   // tables.
@@ -357,7 +370,11 @@ export default async function CoachPlayersPage() {
           </Link>
         </div>
 
-        <CoachPlayersClient coaches={coaches} />
+        <CoachPlayersClient
+          coaches={coaches}
+          initialCoach={initialCoach}
+          focusPlayer={focusPlayer}
+        />
       </main>
     </div>
   );
