@@ -55,6 +55,9 @@ export type CoachPlayer = {
   // The CRM's intake note. Read-only: it's what the family said when they
   // signed up, not something a coach should overwrite from the roster.
   crmNotes: string | null;
+  // An upcoming session has nobody attached to it in the CRM, and this player
+  // was matched to it only by being in the family that booked.
+  unconfirmed: boolean;
   parentName: string | null;
   parentAppId: string | null;
   // Contact details live on the card because /admin/parent is owner-only — a
@@ -573,6 +576,12 @@ function PlayerCard({ p }: { p: CoachPlayer }) {
           {p.otherCoaches.length > 0 && (
             <div className="mt-1 text-xs font-medium text-sky-700">
               Also coached by {fmtList(p.otherCoaches)}
+            </div>
+          )}
+          {p.unconfirmed && (
+            <div className="mt-1 text-xs font-medium text-amber-700">
+              No player attached to that session in the CRM — showing the family
+              who booked it. Confirm who&apos;s coming.
             </div>
           )}
           {!p.appId && (

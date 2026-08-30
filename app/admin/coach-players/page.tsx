@@ -38,6 +38,7 @@ type Row = {
   secondary_position: string | null;
   coach_notes: string | null;
   crm_notes: string | null;
+  unconfirmed: boolean;
 };
 
 export default async function CoachPlayersPage() {
@@ -66,7 +67,8 @@ export default async function CoachPlayersPage() {
         END AS coach,
         pl.id AS crm_player_id,
         s.session_date,
-        ((s.session_date::timestamptz) <= now()) AS is_past
+        ((s.session_date::timestamptz) <= now()) AS is_past,
+        false AS inferred
       FROM crm_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
       JOIN crm_session_players sp ON sp.session_id = s.id
@@ -82,12 +84,65 @@ export default async function CoachPlayersPage() {
         END AS coach,
         pl.id,
         s.session_date,
-        ((s.session_date::timestamptz) <= now()) AS is_past
+        ((s.session_date::timestamptz) <= now()) AS is_past,
+        false
       FROM crm_first_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
       JOIN crm_first_session_players fsp ON fsp.first_session_id = s.id
       JOIN crm_players pl ON pl.id = fsp.player_id
       WHERE s.cancelled IS NOT TRUE
+      -- A session can be booked without anyone attaching a player to it — a
+      -- first session booked off a phone call, most often. The session is real
+      -- and the coach still has to show up for it, so fall back to the family
+      -- on the booking and flag the card rather than dropping the session off
+      -- the roster entirely.
+      --
+      -- Upcoming sessions only. Doing this for past ones would credit every
+      -- sibling in the family with a session only one of them attended, which
+      -- inflates session counts, package math and the score card. A booking
+      -- ahead carries none of that weight — it just says "someone from this
+      -- family is coming, go find out who".
+      UNION ALL
+      SELECT
+        CASE
+          WHEN st.slug = ANY(${COACH_SLUGS as unknown as string[]}) THEN st.slug
+          WHEN lower(btrim(s.title)) LIKE 'coach simpson%' THEN 'simpson'
+          WHEN lower(btrim(s.title)) LIKE 'coach simon%'   THEN 'simon'
+          ELSE 'david'
+        END AS coach,
+        pl.id,
+        s.session_date,
+        ((s.session_date::timestamptz) <= now()) AS is_past,
+        true
+      FROM crm_sessions s
+      LEFT JOIN crm_staff st ON st.id = s.coach_id
+      JOIN crm_players pl ON pl.parent_id = s.parent_id
+      WHERE s.cancelled IS NOT TRUE
+        AND (s.session_date::timestamptz) > now()
+        AND NOT EXISTS (
+          SELECT 1 FROM crm_session_players sp WHERE sp.session_id = s.id
+        )
+      UNION ALL
+      SELECT
+        CASE
+          WHEN st.slug = ANY(${COACH_SLUGS as unknown as string[]}) THEN st.slug
+          WHEN lower(btrim(s.title)) LIKE 'coach simpson%' THEN 'simpson'
+          WHEN lower(btrim(s.title)) LIKE 'coach simon%'   THEN 'simon'
+          ELSE 'david'
+        END AS coach,
+        pl.id,
+        s.session_date,
+        ((s.session_date::timestamptz) <= now()) AS is_past,
+        true
+      FROM crm_first_sessions s
+      LEFT JOIN crm_staff st ON st.id = s.coach_id
+      JOIN crm_players pl ON pl.parent_id = s.parent_id
+      WHERE s.cancelled IS NOT TRUE
+        AND (s.session_date::timestamptz) > now()
+        AND NOT EXISTS (
+          SELECT 1 FROM crm_first_session_players fsp
+          WHERE fsp.first_session_id = s.id
+        )
     ),
     -- One active package per family; if there are several, the most recent one.
     pkg AS (
@@ -160,7 +215,10 @@ export default async function CoachPlayersPage() {
         NULLIF(btrim(app.long_term_development_notes), ''),
         NULLIF(btrim(pd.notes), '')
       ) AS coach_notes,
-      NULLIF(btrim(pl.notes), '') AS crm_notes
+      NULLIF(btrim(pl.notes), '') AS crm_notes,
+      -- An upcoming session with no player attached in the CRM, matched to
+      -- this player only because they're in the family on the booking.
+      COALESCE(bool_or(a.inferred) FILTER (WHERE NOT a.is_past), false) AS unconfirmed
     FROM att a
     JOIN crm_players pl ON pl.id = a.crm_player_id
     LEFT JOIN crm_parents p ON p.id = pl.parent_id
@@ -218,6 +276,7 @@ export default async function CoachPlayersPage() {
       secondaryPosition: r.secondary_position,
       coachNotes: r.coach_notes,
       crmNotes: r.crm_notes,
+      unconfirmed: r.unconfirmed,
       parentName: r.parent_name,
       parentAppId: r.parent_app_id,
       parentPhone: r.parent_phone,
