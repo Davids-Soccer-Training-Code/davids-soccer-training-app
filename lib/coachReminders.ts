@@ -62,9 +62,18 @@ const START_DATE = "2026-08-18";
 // day rather than its stored UTC instant — an evening session must not fall on
 // the wrong side of the boundary.
 
+// A first session is a trial, not the start of a program, and a coach who has
+// met a player once owes them one thing: the session note. So every rule below
+// except the session note is gated on `crm_players_in_program` — the players
+// with a session behind them that wasn't the trial. No photos, no two-week
+// check-in, no goals, no baseline report until then, and everything opens up on
+// its own the moment they train again. The view lives in the migration next to
+// coach_player_sessions, which it reads; see migrations/0055_session_attendees.sql.
+
 export type SyncResult = Record<string, number>;
 
-// One note per session that hasn't been written up yet.
+// One note per session that hasn't been written up yet. Deliberately ungated:
+// this is the whole of what a first session asks of a coach.
 async function generateMiniNotes(): Promise<number> {
   const rows = (await sql`
     WITH unwritten AS (
@@ -124,6 +133,9 @@ async function generateInitialReports(): Promise<number> {
     LEFT JOIN players app ON app.crm_player_id = f.crm_player_id
     WHERE (f.package_sessions >= 1 OR f.past_sessions >= 2)
       AND ((f.first_at::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${START_DATE}::date
+      AND EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = f.crm_player_id
+      )
       AND NOT EXISTS (
       SELECT 1 FROM player_coaching_reports r
       WHERE r.player_id = app.id AND r.type = 'baseline'
@@ -168,7 +180,10 @@ async function generateProgressReports(): Promise<number> {
       ((m.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date
     FROM milestones m
     LEFT JOIN players app ON app.crm_player_id = m.crm_player_id
-    WHERE NOT EXISTS (
+    WHERE EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = m.crm_player_id
+      )
+      AND NOT EXISTS (
       SELECT 1 FROM player_coaching_reports r
       WHERE r.player_id = app.id
         AND r.type = 'progress'
@@ -209,6 +224,9 @@ async function generateParentCheckins(): Promise<number> {
     FROM last_seen l
     LEFT JOIN last_done d ON d.crm_player_id = l.crm_player_id
     WHERE ((l.last_at::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${START_DATE}::date
+      AND EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = l.crm_player_id
+      )
       AND (d.done_at IS NULL OR d.done_at < now() - interval '14 days')
       AND NOT EXISTS (
         SELECT 1 FROM coach_reminders o
@@ -241,6 +259,8 @@ async function generateMedia(): Promise<number> {
       WHERE (session_date::timestamptz) > now()
         -- Only once the session is close; see MEDIA_LEAD_TIME.
         AND (session_date::timestamptz) <= now() + (${MEDIA_LEAD_TIME})::interval
+        -- Never for the session that is the trial itself.
+        AND source <> 'first'
       ORDER BY crm_player_id, session_date
     )
     INSERT INTO coach_reminders (coach_slug, crm_player_id, kind, anchor, anchor_date)
@@ -253,6 +273,9 @@ async function generateMedia(): Promise<number> {
     FROM next_up nu
     JOIN counts c ON c.crm_player_id = nu.crm_player_id
     WHERE c.n % 2 = 1
+      AND EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = nu.crm_player_id
+      )
     ON CONFLICT (kind, crm_player_id, anchor) DO NOTHING
     RETURNING id
   `) as unknown as Array<{ id: string }>;
@@ -292,7 +315,10 @@ async function generateDataCollection(): Promise<number> {
       ((m.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date
     FROM milestones m
     LEFT JOIN players app ON app.crm_player_id = m.crm_player_id
-    WHERE NOT EXISTS (
+    WHERE EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = m.crm_player_id
+      )
+      AND NOT EXISTS (
       SELECT 1 FROM player_tests t
       WHERE t.player_id = app.id
         AND t.test_date >= ((m.session_date::timestamptz) AT TIME ZONE 'America/Phoenix')::date
@@ -324,6 +350,9 @@ async function generateDataCollection(): Promise<number> {
     LEFT JOIN players app ON app.crm_player_id = f.crm_player_id
     WHERE (f.package_sessions >= 1 OR f.past_sessions >= 2)
       AND ((f.first_at::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${START_DATE}::date
+      AND EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = f.crm_player_id
+      )
       AND NOT EXISTS (
       SELECT 1 FROM player_tests t WHERE t.player_id = app.id
     )
@@ -357,6 +386,9 @@ async function generateGoalSetup(): Promise<number> {
     FROM last_seen l
     LEFT JOIN players app ON app.crm_player_id = l.crm_player_id
     WHERE ((l.last_at::timestamptz) AT TIME ZONE 'America/Phoenix')::date >= ${START_DATE}::date
+      AND EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = l.crm_player_id
+      )
       AND NOT EXISTS (
         SELECT 1 FROM player_period_goals g
         WHERE g.player_id = app.id
@@ -407,6 +439,9 @@ async function generateGoalCheckins(): Promise<number> {
       WHERE g.player_id = app.id
         AND g.end_date >= (now() AT TIME ZONE 'America/Phoenix')::date
     )
+      AND EXISTS (
+        SELECT 1 FROM crm_players_in_program ip WHERE ip.crm_player_id = e.crm_player_id
+      )
     ON CONFLICT (kind, crm_player_id, anchor) DO NOTHING
     RETURNING id
   `) as unknown as Array<{ id: string }>;
@@ -482,6 +517,28 @@ async function closeSatisfiedData(): Promise<number> {
   return rows.length;
 }
 
+// Everything a player who is still only a trial should never have been asked
+// for. The rules above no longer raise these, so this is what clears the ones
+// raised before that was true — and what tidies up when a session is cancelled
+// in the CRM and a player drops back out of the program.
+//
+// Deleted rather than marked done: nobody did this work, and it was never owed.
+// Marking a parent check-in done would also start its two-week clock, which
+// would then hide the real one when the player does join the program.
+async function pruneOutOfProgram(): Promise<number> {
+  const rows = (await sql`
+    DELETE FROM coach_reminders cr
+    WHERE cr.status = 'open'
+      AND cr.kind <> 'mini_note'
+      AND NOT EXISTS (
+        SELECT 1 FROM crm_players_in_program ip
+        WHERE ip.crm_player_id = cr.crm_player_id
+      )
+    RETURNING cr.id
+  `) as unknown as Array<{ id: string }>;
+  return rows.length;
+}
+
 // Close whatever one player's newly-saved work has just satisfied. Called from
 // the report and goal save routes so the reminder is already gone by the time
 // the coach lands back on the list — the same rules the cron sweep uses, just
@@ -505,6 +562,7 @@ export async function syncCoachReminders(): Promise<SyncResult> {
   const data_collection = await generateDataCollection();
   const goal_setup = await generateGoalSetup();
   const goal_checkin = await generateGoalCheckins();
+  const pruned = await pruneOutOfProgram();
   const closed = await closeSatisfied();
   const closed_data = await closeSatisfiedData();
   const closed_goals = await closeSatisfiedGoals();
@@ -512,6 +570,7 @@ export async function syncCoachReminders(): Promise<SyncResult> {
   return {
     mini_note, initial_report, progress_report, parent_checkin, media,
     data_collection, goal_setup, goal_checkin,
+    pruned,
     closed: closed + closed_data + closed_goals,
   };
 }

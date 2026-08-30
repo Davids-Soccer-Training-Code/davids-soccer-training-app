@@ -13,6 +13,7 @@ type Row = {
   id: string;
   coach_slug: string;
   kind: string;
+  anchor: string;
   anchor_date: string;
   created_at: string;
   name: string;
@@ -41,6 +42,7 @@ export default async function RemindersPage({
       cr.id,
       cr.coach_slug,
       cr.kind,
+      cr.anchor,
       cr.anchor_date::text AS anchor_date,
       cr.created_at,
       pl.name,
@@ -63,6 +65,9 @@ export default async function RemindersPage({
     byCoach[slug].push({
       id: r.id,
       kind: r.kind as Reminder["kind"],
+      // The anchor already names the session that raised it, so a first
+      // session is recognisable without a column of its own.
+      firstSession: r.anchor.startsWith("session:first:"),
       anchorDate: r.anchor_date,
       createdAt: String(r.created_at),
       playerName: r.name,

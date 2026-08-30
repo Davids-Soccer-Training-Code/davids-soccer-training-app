@@ -21,6 +21,10 @@ export type ReminderKind =
 export type Reminder = {
   id: string;
   kind: ReminderKind;
+  // Raised by a first session. A trial player gets the session note and
+  // nothing else, and the card says so rather than leaving the coach
+  // wondering what happened to the rest.
+  firstSession: boolean;
   anchorDate: string; // YYYY-MM-DD
   createdAt: string; // ISO timestamp, when the reminder was first raised
   playerName: string;
@@ -160,9 +164,18 @@ function ReminderCard({ r, coach }: { r: Reminder; coach: CoachSlug }) {
             <span className="text-base font-bold tracking-tight text-gray-900">
               {r.playerName}
             </span>
+            {r.firstSession && (
+              <span className="inline-block rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                First session
+              </span>
+            )}
             <UrgencyBadge u={urgency} />
           </div>
-          <div className="mt-0.5 text-sm text-gray-600">{KIND_BLURB[r.kind]}</div>
+          <div className="mt-0.5 text-sm text-gray-600">
+            {r.firstSession && r.kind === "mini_note"
+              ? "First session — write the note on how it went. That's the only thing due for a trial."
+              : KIND_BLURB[r.kind]}
+          </div>
           {!r.appId && KIND_HREF[r.kind] && (
             <div className="mt-1 text-xs font-medium text-amber-700">
               No account yet, so this can&apos;t be filed. Create their profile and the

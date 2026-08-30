@@ -67,8 +67,8 @@ export default async function CoachSessionsPage() {
       LEFT JOIN crm_staff st ON st.id = s.coach_id
       LEFT JOIN crm_parents p ON p.id = s.parent_id
       LEFT JOIN parents pa ON pa.crm_parent_id = p.id
-      LEFT JOIN crm_session_players sp ON sp.session_id = s.id
-      LEFT JOIN crm_players pl ON pl.id = sp.player_id
+      LEFT JOIN crm_session_attendees a ON a.source = 'regular' AND a.session_id = s.id
+      LEFT JOIN crm_players pl ON pl.id = a.player_id
       LEFT JOIN players app ON app.crm_player_id = pl.id
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) >= now() - interval '3 hours'
@@ -94,8 +94,8 @@ export default async function CoachSessionsPage() {
       LEFT JOIN crm_staff st ON st.id = s.coach_id
       LEFT JOIN crm_parents p ON p.id = s.parent_id
       LEFT JOIN parents pa ON pa.crm_parent_id = p.id
-      LEFT JOIN crm_first_session_players fsp ON fsp.first_session_id = s.id
-      LEFT JOIN crm_players pl ON pl.id = fsp.player_id
+      LEFT JOIN crm_session_attendees a ON a.source = 'first' AND a.session_id = s.id
+      LEFT JOIN crm_players pl ON pl.id = a.player_id
       LEFT JOIN players app ON app.crm_player_id = pl.id
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) >= now() - interval '3 hours'

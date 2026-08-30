@@ -17,6 +17,7 @@ type PendingRow = {
   id: string;
   coach_slug: string;
   kind: ReminderKind;
+  anchor: string;
   player_name: string;
   parent_name: string | null;
   anchor_date: string;
@@ -34,7 +35,12 @@ function instruction(r: PendingRow): string {
     case "media":
       return `${player} trains with you within the hour. Get a few 10-15 second clips and some photos during the session — save them for their profile afterwards.`;
     case "mini_note":
-      return `You trained ${player}. Write a short note while it's fresh: what you worked on, how they did, what's next.`;
+      // A trial gets this text and nothing else — no photos prompt, no
+      // check-in, no goal — so the text says as much rather than leaving the
+      // coach waiting on the rest.
+      return r.anchor.startsWith("session:first:")
+        ? `You ran ${player}'s first session. Write a short note while it's fresh: what you worked on, how they did, what's next. That's all that's needed after a first session.`
+        : `You trained ${player}. Write a short note while it's fresh: what you worked on, how they did, what's next.`;
     case "progress_report":
       return `${player} has hit 6 sessions. Time for a progress report — rate first touch, dribbling, passing, shot technique, vision and habits out of 5, each with notes, then overall strengths, where to keep focus, and long-term goals.`;
     case "initial_report":
@@ -88,6 +94,7 @@ export async function buildReminderMessages(): Promise<ReminderMessage[]> {
       cr.id,
       cr.coach_slug,
       cr.kind,
+      cr.anchor,
       cr.anchor_date::text AS anchor_date,
       pl.name  AS player_name,
       par.name AS parent_name,

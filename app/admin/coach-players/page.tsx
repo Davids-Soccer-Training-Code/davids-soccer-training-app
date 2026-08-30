@@ -49,6 +49,12 @@ export default async function CoachPlayersPage() {
   // Every player a coach has trained or has booked, from both CRM session
   // tables.
   //
+  // Who is on a session comes from crm_session_attendees, which reads the
+  // junction tables *and* the older single-player column on the session row —
+  // the CRM writes whichever suits how the session was created, and reading
+  // only the junction tables is what kept a booked first session off the
+  // roster until someone attached the player by hand.
+  //
   // Coach attribution matches the Coach Calendar exactly (the assigned coach
   // wins, then a "Coach Simon/Simpson" title, otherwise David) so a player
   // can't appear on one page's list and a different page's calendar.
@@ -71,8 +77,8 @@ export default async function CoachPlayersPage() {
         false AS inferred
       FROM crm_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
-      JOIN crm_session_players sp ON sp.session_id = s.id
-      JOIN crm_players pl ON pl.id = sp.player_id
+      JOIN crm_session_attendees a ON a.source = 'regular' AND a.session_id = s.id
+      JOIN crm_players pl ON pl.id = a.player_id
       WHERE s.cancelled IS NOT TRUE
       UNION ALL
       SELECT
@@ -88,8 +94,8 @@ export default async function CoachPlayersPage() {
         false
       FROM crm_first_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
-      JOIN crm_first_session_players fsp ON fsp.first_session_id = s.id
-      JOIN crm_players pl ON pl.id = fsp.player_id
+      JOIN crm_session_attendees a ON a.source = 'first' AND a.session_id = s.id
+      JOIN crm_players pl ON pl.id = a.player_id
       WHERE s.cancelled IS NOT TRUE
       -- A session can be booked without anyone attaching a player to it — a
       -- first session booked off a phone call, most often. The session is real
@@ -120,7 +126,8 @@ export default async function CoachPlayersPage() {
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) > now()
         AND NOT EXISTS (
-          SELECT 1 FROM crm_session_players sp WHERE sp.session_id = s.id
+          SELECT 1 FROM crm_session_attendees a
+          WHERE a.source = 'regular' AND a.session_id = s.id
         )
       UNION ALL
       SELECT
@@ -140,8 +147,8 @@ export default async function CoachPlayersPage() {
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) > now()
         AND NOT EXISTS (
-          SELECT 1 FROM crm_first_session_players fsp
-          WHERE fsp.first_session_id = s.id
+          SELECT 1 FROM crm_session_attendees a
+          WHERE a.source = 'first' AND a.session_id = s.id
         )
     ),
     -- One active package per family; if there are several, the most recent one.

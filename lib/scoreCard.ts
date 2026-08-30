@@ -94,8 +94,8 @@ export async function getScoreCardData(
         s.session_date
       FROM crm_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
-      JOIN crm_session_players sp ON sp.session_id = s.id
-      JOIN crm_players pl ON pl.id = sp.player_id
+      JOIN crm_session_attendees a ON a.source = 'regular' AND a.session_id = s.id
+      JOIN crm_players pl ON pl.id = a.player_id
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) <= now()
         AND (s.session_date::timestamptz) >= now() - interval '6 weeks'
@@ -112,8 +112,8 @@ export async function getScoreCardData(
         s.session_date
       FROM crm_first_sessions s
       LEFT JOIN crm_staff st ON st.id = s.coach_id
-      JOIN crm_first_session_players fsp ON fsp.first_session_id = s.id
-      JOIN crm_players pl ON pl.id = fsp.player_id
+      JOIN crm_session_attendees a ON a.source = 'first' AND a.session_id = s.id
+      JOIN crm_players pl ON pl.id = a.player_id
       WHERE s.cancelled IS NOT TRUE
         AND (s.session_date::timestamptz) <= now()
         AND (s.session_date::timestamptz) >= now() - interval '6 weeks'
