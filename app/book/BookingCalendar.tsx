@@ -111,6 +111,9 @@ export default function BookingCalendar({
   // Admin block state
   const [blocking, setBlocking] = useState<string | null>(null); // "date|start" being blocked
   const [unblocking, setUnblocking] = useState<string | null>(null); // id being unblocked
+  // Lock/unlock failures need their own banner: the form's `error` only
+  // renders while a slot is selected, so it would swallow this silently.
+  const [blockError, setBlockError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/booking-requests?coach=${encodeURIComponent(coach)}`, { cache: "no-store" })
@@ -204,6 +207,7 @@ export default function BookingCalendar({
   async function handleAdminBlock(date: string, start: string, end: string, slotCoach: string) {
     const key = `${slotCoach}|${date}|${start}`;
     setBlocking(key);
+    setBlockError(null);
     try {
       const res = await fetch("/api/booking-requests", {
         method: "POST",
@@ -216,6 +220,8 @@ export default function BookingCalendar({
         if (data.blocked) {
           setAdminBlocked((prev) => [...prev, data.blocked!]);
         }
+      } else {
+        setBlockError("Couldn't lock that slot. Please try again.");
       }
     } finally {
       setBlocking(null);
@@ -224,14 +230,17 @@ export default function BookingCalendar({
 
   async function handleAdminUnblock(id: string, date: string, start: string, slotCoach: string) {
     setUnblocking(id);
+    setBlockError(null);
     try {
-      const res = await fetch(`/api/admin/booking-requests/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/booking-requests?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (res.ok || res.status === 204) {
         const sameSlot = (b: BookedSlot) =>
           b.date === date && norm(b.start) === norm(start) && b.coach === slotCoach;
         setAdminBlocked((prev) => prev.filter((b) => b.id !== id));
         setBookedSlots((prev) => prev.filter((b) => !sameSlot(b)));
         setLocallyBooked((prev) => prev.filter((b) => !sameSlot(b)));
+      } else {
+        setBlockError("Couldn't unlock that slot. Please try again.");
       }
     } finally {
       setUnblocking(null);
@@ -273,6 +282,9 @@ export default function BookingCalendar({
 
   return (
     <div className="space-y-10">
+      {blockError && (
+        <p className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700">{blockError}</p>
+      )}
       {loadingSlots ? (
         <div className="py-16 text-center text-sm text-gray-400">Loading available times…</div>
       ) : (

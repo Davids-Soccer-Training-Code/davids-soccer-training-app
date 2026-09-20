@@ -302,3 +302,26 @@ export async function POST(req: NextRequest) {
 
   return Response.json({ request }, { status: 201 });
 }
+
+// DELETE /api/booking-requests?id=<id>
+// Removes an admin block. Lives here rather than under /api/admin on purpose:
+// blocking a slot only needs an admin session (see POST above), so unblocking
+// must not need the owner code — otherwise an admin can create a block they
+// can't remove once the 12-hour owner unlock lapses. The status guard keeps
+// this narrow: only 'blocked' rows can go, never a parent's real request.
+export async function DELETE(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+  if (token?.isAdmin !== true) return new Response("Forbidden", { status: 403 });
+
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) return new Response("id required", { status: 400 });
+
+  const rows = (await sql`
+    DELETE FROM session_booking_requests
+    WHERE id = ${id} AND status = 'blocked'
+    RETURNING id
+  `) as unknown as Array<{ id: string }>;
+
+  if (rows.length === 0) return new Response("Not found", { status: 404 });
+  return new Response(null, { status: 204 });
+}
